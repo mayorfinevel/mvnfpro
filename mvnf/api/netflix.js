@@ -1,6 +1,8 @@
 // ---------------------------------------------------------
 // 🔥 Author   : Dhanz - DIOPREK BUAT MVNF PRO
+// 🌸 Date     : 1 November 2026
 // 🍂 Function : Netflix Token Generator - STABIL RETRY + TELE
+// 🍁 Notes : Mohon untuk tidak menghapus watermark ini.
 // ---------------------------------------------------------
 import { sendAdminNotif } from "./_tele.js";
 
@@ -19,6 +21,21 @@ const DEFAULT_HEADERS = {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// FIX UTAMA DISINI: ambil token apapun bentuknya jadi string
+function getStringToken(input) {
+  if (!input) return null;
+  if (typeof input === 'string') return input;
+  if (typeof input === 'object') {
+    // coba semua kemungkinan key
+    const cand = input.token || input.value || input.accessToken || input.cookie || input.access_token || input.data;
+    if (typeof cand === 'string') return cand;
+    if (typeof cand === 'object') return getStringToken(cand); // rekursif
+    // kalau object murni { token: { ... } }
+    if (input.token && typeof input.token === 'object') return getStringToken(input.token);
+  }
+  return null;
+}
+
 function parseSseResponse(rawText) {
   const items = [];
   const seen = new Set();
@@ -27,18 +44,20 @@ function parseSseResponse(rawText) {
     const candidates = [];
     if (obj.token) candidates.push(obj);
     if (Array.isArray(obj.data)) candidates.push(...obj.data);
-    if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data) && obj.data.token) candidates.push(obj.data);
+    if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) candidates.push(obj.data);
     if (obj.summary?.data && Array.isArray(obj.summary.data)) candidates.push(...obj.summary.data);
-    if (obj.result && typeof obj.result === 'object' && obj.result.token) candidates.push(obj.result);
+    if (obj.result && typeof obj.result === 'object') candidates.push(obj.result);
+    
     for (const c of candidates) {
-      const token = c.token || c.accessToken || c.cookie || null;
-      if (!token || token === '-' || seen.has(token)) continue;
+      const rawToken = c.token || c.accessToken || c.cookie || c.access_token || c;
+      const token = getStringToken(rawToken);
+      if (!token || token === '-' || token.length < 20 || seen.has(token)) continue;
       seen.add(token);
       items.push({
         token,
-        expiry: c.expiry || c.expired || c.expiresAt || c.expire || '-',
-        country: c.profile?.country || c.country || 'Tidak diketahui',
-        plan: c.profile?.plan || c.plan || 'Tidak diketahui',
+        expiry: c.expiry || c.expired || c.expiresAt || c.expire || c.profile?.expiry || '-',
+        country: c.profile?.country || c.country || c.profile?.Country || 'Tidak diketahui',
+        plan: c.profile?.plan || c.plan || c.profile?.Plan || 'Tidak diketahui',
         pc: c.links?.pc || c.pc || c.pcLink || '-',
         android: c.links?.android || c.android || c.androidLink || '-',
         tv: c.links?.tv || c.tv || c.tvLink || '-',
@@ -96,7 +115,6 @@ export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== "GET" && req.method !== "POST") return res.status(200).json({ status: false, success: false, message: "Method not allowed" });
 
   let cookie = "";
   if (req.method === "POST") {
@@ -108,20 +126,18 @@ export default async function handler(req, res) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const items = await fetchOnce(cookie);
-      if (items.length > 0 && items[0].token && items[0].token !== '-') {
+      if (items.length > 0 && items[0].token) {
         const item = items[0];
-        const token = String(item.token);
+        const tokenStr = String(item.token); // SUDAH PASTI STRING
 
-        // KIRIM TELE - nggak bikin gagal kalo error
         try {
-          await sendAdminNotif(`🎬 *NETFLIX BARU*\n\nToken: \`${token.slice(0, 500)}\`\n\nNegara: ${item.country}\nPlan: ${item.plan}\nExpiry: ${item.expiry}\n\nDari: MVNF Premium`);
-        } catch(e){}
+          await sendAdminNotif(`🎬 *NETFLIX BARU*\n\nToken: \`${tokenStr.slice(0, 1000)}\`\n\nNegara: ${item.country}\nPlan: ${item.plan}\nExpiry: ${item.expiry}\n\nDari: MVNF Premium`);
+        } catch(e){ console.log("Tele error:", e.message) }
 
-        // INI FIX-nya: kasih 2 format biar frontend apapun kebaca
         return res.status(200).json({
           status: true,
           success: true,
-          token: token,
+          token: tokenStr,
           expiry: item.expiry,
           expired: item.expiry,
           pcLink: item.pc !== '-' ? item.pc : null,
