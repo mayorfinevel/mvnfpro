@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MVNF • Premium Tools</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+
+  <!-- ================= SPLASH ================= -->
+  <div class="splash" id="splash">
+    <div class="splash-logo">MVNF</div>
+    <div class="splash-sub">PREMIUM TOOLS</div>
+    <div class="splash-bar"><i></i></div>
+  </div>
+
+  <!-- ================= TOPBAR ================= -->
+  <header class="topbar">
+    <span class="brand">MVNF</span>
+    <div class="topbar-right">
+      <span class="status"><i></i> ALL SYSTEM ONLINE</span>
+      <button class="theme-btn" id="themeBtn" title="Ganti tema">🌙</button>
+    </div>
+  </header>
+
+  <main class="shell">
+
+    <!-- ================= JUDUL ================= -->
+    <div class="intro anim-in">
+      <div class="eyebrow">MVNF — PREMIUM TOOLS</div>
+      <h1>MVNF<br><span>Premium</span></h1>
+      <p class="subtitle">
+        Netflix Token • Alight Motion • VIU Premium<br>
+        Pilih layanan, generate, langsung jadi.
+      </p>
+      <p class="limit-info">🛡️ Free • Limit 1x / 5 menit per device biar nggak di-spam</p>
+    </div>
+
+    <!-- ================= TAB ================= -->
+    <div class="tabs anim-in delay-1">
+      <button class="tab active" data-tab="netflix">🎬 Netflix</button>
+      <button class="tab" data-tab="am">✨ AM</button>
+      <button class="tab" data-tab="viu">📺 VIU</button>
+    </div>
+
+    <!-- ================= PANEL NETFLIX ================= -->
+    <section class="panel anim-in delay-2" id="panel-netflix">
+      <p class="warn">
+        ⚠️ 1 Token = 1 Akun Netflix.<br>
+        Jangan refresh / generate 2x, token lama hangus.
+      </p>
+
+      <button class="primary-btn" id="generateBtn">GENERATE TOKEN <span>→</span></button>
+      <p class="message" id="message"></p>
+      <p class="cooldown" id="netflixCooldown"></p>
+
+      <div class="result hidden" id="result">
+        <div class="result-top">
+          <div>
+            <span class="field-label">STATUS</span>
+            <div class="success-label"><i></i> Token Aktif</div>
+          </div>
+          <div class="expiry">
+            <span class="field-label">EXPIRED</span>
+            <strong id="expiry">—</strong>
+          </div>
+        </div>
+
+        <div class="token-label field-label">TOKEN</div>
+        <div class="token-box">
+          <code id="tokenText"></code>
+          <button class="copy-btn" data-copy="tokenText">Salin</button>
+        </div>
+
+        <div class="links-label field-label">LOGIN LINK</div>
+        <div class="link-list">
+          <div class="link-item">
+            <div class="device"><span>💻</span><div><strong>PC / Laptop</strong><small>Browser</small></div></div>
+            <input type="hidden" id="pcLink">
+            <a id="pcOpen" href="#" target="_blank" class="open-link">Buka →</a>
+          </div>
+          <div class="link-item">
+            <div class="device"><span>📱</span><div><strong>Android</strong><small>App Netflix</small></div></div>
+            <input type="hidden" id="androidLink">
+            <a id="androidOpen" href="#" target="_blank" class="open-link">Buka →</a>
+          </div>
+          <div class="link-item">
+            <div class="device"><span>📺</span><div><strong>Smart TV</strong><small>TV / STB</small></div></div>
+            <input type="hidden" id="tvLink">
+            <a id="tvOpen" href="#" target="_blank" class="open-link">Buka →</a>
+          </div>
+        </div>
+
+        <div class="result-foot">
+          <span>MVNF • Netflix</span>
+          <button class="text-btn" id="resetBtn">Reset ↺</button>
+        </div>
+      </div>
+
+      <div class="wa-wrap">
+        <a class="wa-btn wa-channel" href="https://whatsapp.com/channel/0029VbB7B8b9cK4VJvZJz" target="_blank">📢 Saluran WA</a>
+        <a class="wa-btn wa-chat" href="https://wa.me/6281234567890" target="_blank">💬 Chat Admin</a>
+      </div>
+      <div class="panel-foot"><span>© MVNF 2026</span><span>SECURE • FAST</span></div>
+    </section>
+
+    <!-- ================= PANEL AM ================= -->
+    <section class="panel hidden anim-in" id="panel-am">
+      <p class="warn">
+        ✨ Alight Motion Premium - JZCloud<br>
+        Pakai email kamu, magic link dikirim ke email.
+      </p>
+
+      <div class="am-stats">
+        <div><span class="field-label">API STATUS</span><strong id="amApiStatus">—</strong></div>
+        <div><span class="field-label">RAW</span><strong id="amStatsRaw">—</strong></div>
+      </div>
+      <button class="secondary-btn" id="amCheckStats">Cek Statistik</button>
+
+      <hr class="divider">
+
+      <p class="small-text"><b>Step 1 - Kirim Magic Link</b><br>Masukin email, terus cek email / spam 1-2 menit.</p>
+      <input class="input" id="amEmailInput" type="email" placeholder="contoh: kamu@gmail.com">
+      <button class="primary-btn am-btn" id="amSendBtn">Kirim Magic Link →</button>
+      <p class="message" id="amMessage"></p>
+      <p class="cooldown" id="amCooldown"></p>
+
+      <hr class="divider">
+
+      <p class="small-text"><b>Step 2 - Verifikasi</b><br>Paste magic link yang panjang dari email (bukan kode).</p>
+      <input class="input" id="amLinkInput" type="text" placeholder="Paste magic link dari email...">
+      <button class="primary-btn am-btn" id="amVerifyBtn">Verifikasi & Aktifkan ✓</button>
+      <p class="message" id="amVerifyMsg"></p>
+
+      <div class="result hidden" id="amResult">
+        <div class="success-label"><i></i> AM Premium Aktif!</div>
+        <p class="small-text">Login di Alight Motion pake email yang sama.</p>
+      </div>
+
+      <div class="wa-wrap">
+        <a class="wa-btn wa-channel" href="https://whatsapp.com/channel/0029VbB7B8b9cK4VJvZJz" target="_blank">📢 Saluran WA</a>
+        <a class="wa-btn wa-chat" href="https://wa.me/6281234567890" target="_blank">💬 Chat Admin</a>
+      </div>
+      <div class="panel-foot"><span>© MVNF 2026</span><span>JZCloud • AM PREM</span></div>
+    </section>
+
+    <!-- ================= PANEL VIU ================= -->
+    <section class="panel hidden anim-in" id="panel-viu">
+      <p class="warn">
+        📺 VIU Premium Account<br>
+        Klik generate, akun langsung keluar.<br>
+        Jangan di-share sembarangan.
+      </p>
+
+      <button class="primary-btn viu-btn" id="viuGenerateBtn">GENERATE AKUN VIU →</button>
+      <p class="message" id="viuMessage"></p>
+      <p class="cooldown" id="viuCooldown"></p>
+
+      <div class="result hidden" id="viuResult">
+        <div class="result-top">
+          <div>
+            <span class="field-label">STATUS</span>
+            <div class="success-label"><i></i> VIU Premium Aktif</div>
+          </div>
+          <div class="expiry">
+            <span class="field-label">DEVICE ID</span>
+            <strong id="viuDeviceId">—</strong>
+          </div>
+        </div>
+
+        <div class="field-label" style="margin-bottom:8px;">EMAIL</div>
+        <div class="token-box">
+          <code id="viuEmailText">—</code>
+          <button class="copy-btn" data-copy="viuEmailText">Salin</button>
+        </div>
+
+        <div class="field-label" style="margin-bottom:8px;">PASSWORD</div>
+        <div class="token-box">
+          <code id="viuPasswordText">—</code>
+          <button class="copy-btn" data-copy="viuPasswordText">Salin</button>
+        </div>
+
+        <p class="small-text" id="viuInfo">Login di app VIU pake email & password di atas.</p>
+
+        <div class="result-foot">
+          <span>MVNF • VIU</span>
+          <button class="text-btn" id="viuResetBtn">Reset ↺</button>
+        </div>
+      </div>
+
+      <div class="wa-wrap">
+        <a class="wa-btn wa-channel" href="https://whatsapp.com/channel/0029VbE3FdeGZNCjob8ShJ3l" target="_blank">📢 Saluran WA</a>
+        <a class="wa-btn wa-chat" href="https://wa.me/6281234567890" target="_blank">💬 Chat Admin</a>
+      </div>
+      <div class="panel-foot"><span>© MVNF 2026</span><span>VIU • PREMIUM</span></div>
+    </section>
+
+  </main>
+
+  <footer>
+    MVNF Premium • Netflix • AM • VIU<br>
+    Jangan share akun ke orang lain.
+  </footer>
+
+</body>
+</html>

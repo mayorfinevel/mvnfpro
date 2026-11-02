@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVNF • Admin Log</title>
+<style>
+    * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0c0a08; color: #fff; padding: 20px; }
+  .box { max-width: 900px; margin: auto; }
+  h1 { margin: 0 0 4px; }
+  p { color: #aaa; font-size: 12px; }
+  input, button { padding: 12px; border-radius: 10px; border: 1px solid #333; font-size: 14px; }
+  input { width: 100%; background: #1a1a1a; color: #fff; margin: 10px 0; }
+  button { background: #e50914; color: #fff; border: 0; cursor: pointer; font-weight: 700; width: 100%; }
+  .card { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 12px; margin-top: 10px; font-size: 12px; line-height: 1.6; }
+  .card b { color: #f5b301; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+  .ok { background: #14532d; color: #bbf7d0; }
+  .fail { background: #7f1d1d; color: #fecaca; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .small { color: #888; font-size: 11px; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>MVNF • Admin Log 🗿</h1>
+  <p>Cek siapa aja yang generate. Password default: <b>MVNF123</b><br>Ganti di <b>api/log.js</b> bagian ADMIN_PASS kalau mau.</p>
+
+  <input id="pass" type="password" placeholder="Password admin...">
+  <button id="loadBtn">Lihat Log →</button>
+  <p id="msg"></p>
+  <div id="list"></div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  $('loadBtn').addEventListener('click', async () => {
+    const pass = $('pass').value.trim();
+    $('msg').textContent = 'Loading...';
+    try {
+      const res = await fetch('/api/log?pass=' + encodeURIComponent(pass));
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Gagal');
+      $('msg').textContent = 'Total log: ' + data.total + ' (max 200 terbaru)';
+      $('list').innerHTML = data.logs.map(l => `
+        <div class="card">
+          <div class="top">
+            <b>${l.service.toUpperCase()} • ${l.time}</b>
+            <span class="badge ${l.result === 'success' ? 'ok' : 'fail'}">${l.result || '-'}</span>
+          </div>
+          📱 Device: ${l.device} • ${l.browser} • ${l.platform}<br>
+          🖥️ Screen: ${l.screen} • Lang: ${l.language}<br>
+          🌐 IP: ${l.ip} • ID: ${l.device_id}<br>
+          ${l.email ? '📧 Email: ' + l.email + '<br>' : ''}
+          ${l.extra ? '📝 ' + l.extra + '<br>' : ''}
+          <div class="small">${l.userAgent}</div>
+        </div>
+      `).join('') || '<p>Belum ada log.</p>';
+    } catch (e) { $('msg').textContent = e.message; }
+  });
+</script>
+</body>
+</html>
