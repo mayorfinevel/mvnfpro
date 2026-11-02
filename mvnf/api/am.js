@@ -1,41 +1,70 @@
-// api/am.js - AM Premium - MVNF (Bulk Support)
+// api/am.js - AM Premium - MVNF (No Limit Edition)
 import { sendAdminNotif } from "./_tele.js";
 
 const BASE_URL = 'https://am.noxxyrorr.biz.id';
 const API_GENERATE = `${BASE_URL}/api/am/generate`;
 const API_STATS = `${BASE_URL}/api/stats`;
 const API_SEND = `${BASE_URL}/api/send-link`;
-const API_SEND_ALT = `${BASE_URL}/api/request-link`; 
 const API_VERIFY = `${BASE_URL}/api/verify-link`;
 
-const HEADERS = {
-  'Accept': 'application/json',
-  'Origin': BASE_URL,
-  'Referer': `${BASE_URL}/`,
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Content-Type': 'application/json'
-};
+const UAS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+  'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1'
+];
+
+function randomIp() {
+  const octet = () => Math.floor(Math.random() * 254) + 1;
+  return `${octet()}.${octet()}.${octet()}.${octet()}`;
+}
+
+function randomUa() {
+  return UAS[Math.floor(Math.random() * UAS.length)];
+}
 
 function translateError(msg) {
   const m = String(msg || '');
   if (m.includes('QUOTA_EXCEEDED') || m.includes('Exceeded daily quota') || m.includes('Batas limit')) {
-    return 'Jatah kirim email harian lagi penuh. Coba lagi dalam beberapa menit atau hubungi Admin.';
+    return 'Server AM sedang penuh (Quota Upstream). Coba klik 2-3 kali lagi, sistem sedang rotasi IP otomatis.';
   }
   if (m.includes('INVALID_EMAIL') || m.includes('invalid-email')) return 'Email-nya nggak valid, cek lagi.';
   if (m.includes('TOO_MANY')) return 'Kebanyakan request, tunggu 5 menit lagi.';
   if (m.includes('Failed to fetch') || m.includes('timeout') || m.includes('ETIMEDOUT')) {
-    return 'Koneksi ke server timeout. Coba klik ulang.';
+    return 'Koneksi ke server AM timeout. Coba klik ulang.';
   }
   return m.slice(0, 300);
 }
 
-async function callApi(url, method, body, customHeaders = {}) {
+// Rotasi IP, User-Agent, & Origin
+async function callApi(url, method, body, useBypass = true) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 35000);
+  
+  const headers = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  };
+
+  if (useBypass) {
+    const fakeIp = randomIp();
+    headers['Origin'] = BASE_URL;
+    headers['Referer'] = `${BASE_URL}/`;
+    headers['User-Agent'] = randomUa();
+    headers['X-Forwarded-For'] = fakeIp;
+    headers['X-Real-IP'] = fakeIp;
+    headers['CF-Connecting-IP'] = fakeIp;
+    headers['Client-IP'] = fakeIp;
+  } else {
+    headers['Origin'] = BASE_URL;
+    headers['Referer'] = `${BASE_URL}/`;
+    headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)';
+  }
+
   try {
     const res = await fetch(url, {
       method,
-      headers: { ...HEADERS, ...customHeaders },
+      headers,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal
     });
@@ -60,10 +89,6 @@ function extractError(d, fallback = '') {
   return d.message || (d.error && d.error.message) || d.error || d.result || fallback;
 }
 
-function randomIp() {
-  return `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -76,7 +101,7 @@ export default async function handler(req, res) {
 
     // ---- stats ----
     if (req.method === 'GET' || act === 'stats' || act === 'status') {
-      const r = await callApi(API_STATS, 'GET');
+      const r = await callApi(API_STATS, 'GET', null, false);
       const d = r.data || {};
       return res.status(200).json({
         success: r.ok && isOkBody(d),
@@ -85,149 +110,71 @@ export default async function handler(req, res) {
       });
     }
 
-    // ---- generate (single) ----
-    if (act === 'generate' || act === 'gen') {
-      const payload = {};
-      if (customOrderId && String(customOrderId).trim()) payload.customOrderId = String(customOrderId).trim();
-      const r = await callApi(API_GENERATE, 'POST', payload);
-      const d = r.data || {};
-      if (!r.ok || !isOkBody(d)) {
-        return res.status(200).json({ success: false, error: translateError(extractError(d, r.raw)) });
-      }
-      try {
-        await sendAdminNotif(`✨ *AM GENERATED*\n\nEmail: \`${d.email}\`\nTier: ${d.tier || '-'}\nOrder: ${d.orderId || '-'}\n\nDari: MVNF Premium`);
-      } catch (e) {}
-      return res.status(200).json({
-        success: true, email: d.email, inboxLink: d.inboxLink, provider: d.provider,
-        membershipStatus: d.membershipStatus, tier: d.tier, planName: d.planName,
-        subscription: d.subscription, orderId: d.orderId, validUntil: d.validUntil,
-        idToken: d.idToken, cookie: d.cookie, createdAt: d.createdAt, stats: d.stats, message: d.message
-      });
-    }
-
-    // ---- bulk generate (acak dari Noxxy) ----
-    if (act === 'bulk-generate' || act === 'bulk-gen') {
-      const total = Math.max(1, Math.min(parseInt(count, 10) || 1, 10)); // Max 10 biar ga timeout Vercel
-      const accounts = [];
-      
-      for (let i = 1; i <= total; i++) {
-        const customId = customOrderId ? `${customOrderId}-${i}` : undefined;
-        const payload = customId ? { customOrderId: customId } : {};
-        
-        const r = await callApi(API_GENERATE, 'POST', payload);
-        const d = r.data || {};
-        
-        if (r.ok && isOkBody(d)) {
-          accounts.push({
-            index: i, status: true, email: d.email, inboxLink: d.inboxLink,
-            tier: d.tier, orderId: d.orderId, cookie: d.cookie
-          });
-        } else {
-          accounts.push({ index: i, status: false, error: translateError(extractError(d, r.raw)) });
-        }
-        // Delay 1 detik antar request
-        if (i < total) await new Promise(r => setTimeout(r, 1000));
-      }
-
-      try {
-        await sendAdminNotif(`📦 *AM BULK GENERATED*\n\nTotal: ${total}\nSukses: ${accounts.filter(a => a.status).length}\n\nDari: MVNF Premium`);
-      } catch (e) {}
-
-      return res.status(200).json({
-        success: true,
-        totalRequested: total,
-        totalSuccess: accounts.filter(a => a.status).length,
-        accounts
-      });
-    }
-
-    // ---- bulk send (email sendiri) ----
-    if (act === 'bulk-send' || act === 'bulk-send-link') {
-      let listEmails = [];
-      
-      if (Array.isArray(emails)) {
-        listEmails = emails.map(e => String(e).trim()).filter(e => e.includes('@'));
-      } else if (typeof emails === 'string') {
-        listEmails = emails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@'));
-      } else if (email) {
-        listEmails = [String(email).trim()];
-      }
-
-      if (!listEmails.length) {
-        return res.status(200).json({ success: false, error: 'Daftar email kosong / tidak valid' });
-      }
-
-      const total = Math.min(listEmails.length, 10); // Batasi 10 per request biar aman
-      const results = [];
-
-      for (let i = 0; i < total; i++) {
-        const targetEmail = listEmails[i];
-        const payload = { email: targetEmail };
-        
-        // Fallback logic (request-link -> send-link dengan X-Forwarded-For)
-        let r = await callApi(API_SEND_ALT, 'POST', payload);
-        let d = r.data || {};
-
-        if (!r.ok || !isOkBody(d)) {
-          const isQuota = extractError(d).match(/QUOTA|Exceeded|Batas limit/i);
-          if (isQuota || r.status === 404) {
-             r = await callApi(API_SEND, 'POST', payload, { 'X-Forwarded-For': randomIp() });
-             d = r.data || {};
-          }
-        }
-
-        const ok = r.ok && isOkBody(d);
-        results.push({
-          email: targetEmail,
-          success: ok,
-          cookie: d.cookie || null,
-          message: d.message || null,
-          error: ok ? undefined : translateError(extractError(d, r.raw))
-        });
-
-        // Jeda 1.5 detik antar email biar ga dianggap spam
-        if (i < total - 1) await new Promise(r => setTimeout(r, 1500));
-      }
-
-      const successCount = results.filter(r => r.success).length;
-      if (successCount > 0) {
-        try {
-          await sendAdminNotif(`📦 *AM BULK SEND*\n\nTarget: ${total}\nSukses: ${successCount}\n\nDari: MVNF Premium`);
-        } catch (e) {}
-      }
-
-      return res.status(200).json({
-        success: true,
-        totalRequested: total,
-        totalSuccess: successCount,
-        results
-      });
-    }
-
-    // ---- send link (single) ----
+    // ---- send link (Email Sendiri + Bypass) ----
     if (act === 'send' || act === 'send-link' || (req.method === 'POST' && email && !magicLink && !link)) {
       if (!email) return res.status(200).json({ success: false, error: 'Email kosong' });
       
-      const payload = { email: String(email).trim() };
-      let r = await callApi(API_SEND_ALT, 'POST', payload);
-      let d = r.data || {};
+      const targetEmail = String(email).trim();
+      const payload = { email: targetEmail };
+      
+      let r = { ok: false, data: {} };
+      let attempt = 0;
+      let lastError = '';
 
-      if (!r.ok || !isOkBody(d)) {
-        const isQuota = extractError(d).match(/QUOTA|Exceeded|Batas limit/i);
-        if (isQuota || r.status === 404) {
-           r = await callApi(API_SEND, 'POST', payload, { 'X-Forwarded-For': randomIp() });
-           d = r.data || {};
+      // Loop tembak 3x pakai IP & UA berbeda
+      while (attempt < 3) {
+        attempt++;
+        r = await callApi(API_SEND, 'POST', payload, true);
+        let d = r.data || {};
+        
+        if (r.ok && isOkBody(d)) {
+          lastError = '';
+          break; 
         }
+        
+        lastError = extractError(d, r.raw);
+        
+        // Kalau error-nya BUKAN quota, langsung break
+        if (!lastError.match(/QUOTA|Exceeded|Batas limit/i)) break;
+        
+        // Delay 500ms sebelum ganti IP
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
+      const d = r.data || {};
       const ok = r.ok && isOkBody(d);
+
+      // FALLBACK MUTLAK: Kalau tetep Quota, paksa pakai endpoint /api/am/generate
+      if (!ok && lastError.match(/QUOTA|Exceeded|Batas limit/i)) {
+         const genPayload = { customOrderId: `bypass-${Date.now()}` };
+         const rGen = await callApi(API_GENERATE, 'POST', genPayload, true);
+         const dGen = rGen.data || {};
+         
+         if (rGen.ok && isOkBody(dGen)) {
+             // Generate sukses, kita anggap link terkirim
+             try { await sendAdminNotif(`✨ *AM BYPASS*\n\nEmail User: \`${targetEmail}\`\nEmail Gen: \`${dGen.email}\`\nStatus: Quota bypassed\n\nDari: MVNF Premium`); } catch (e) {}
+             
+             return res.status(200).json({
+                 success: true,
+                 bypassed: true,
+                 email: dGen.email,
+                 inboxLink: dGen.inboxLink,
+                 cookie: dGen.cookie,
+                 message: 'Limit server terlewati, akun dialihkan ke email generate otomatis.'
+             });
+         }
+      }
+
       if (ok) {
-        try { await sendAdminNotif(`✨ *AM BARU*\n\nEmail: \`${email}\`\nStatus: Link dikirim\n\nDari: MVNF Premium`); } catch (e) {}
+        try { await sendAdminNotif(`✨ *AM BARU*\n\nEmail: \`${targetEmail}\`\nStatus: Link dikirim\n\nDari: MVNF Premium`); } catch (e) {}
       }
 
       return res.status(200).json({
-        success: ok, email: d.email || String(email).trim(), cookie: d.cookie,
-        message: d.message, error: ok ? undefined : translateError(extractError(d, r.raw))
+        success: ok,
+        email: d.email || targetEmail,
+        cookie: d.cookie,
+        message: d.message,
+        error: ok ? undefined : translateError(lastError)
       });
     }
 
@@ -240,7 +187,7 @@ export default async function handler(req, res) {
       if (customOrderId && String(customOrderId).trim()) payload.customOrderId = String(customOrderId).trim();
       if (cookie && String(cookie).trim()) payload.cookie = String(cookie).trim();
 
-      const r = await callApi(API_VERIFY, 'POST', payload);
+      const r = await callApi(API_VERIFY, 'POST', payload, true);
       const d = r.data || {};
       const ok = r.ok && (d.success === true || d.authenticated === true);
 
@@ -257,7 +204,7 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ success: false, error: 'Action nggak dikenal. Pake: stats / send / verify / generate / bulk-generate / bulk-send' });
+    return res.status(200).json({ success: false, error: 'Action nggak dikenal.' });
   } catch (e) {
     return res.status(200).json({ success: false, error: translateError(e.message) });
   }
