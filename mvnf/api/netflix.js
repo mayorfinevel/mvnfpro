@@ -1,104 +1,143 @@
 // ---------------------------------------------------------
 // 🔥 Author   : Dhanz
 // 🌸 Date     : 1 November 2026
-// 🍂 Function : Netflix Token Generator Base Module (ESM) - Adapted for MVNF PRO
-// 🌟 Channels : 
-//  - https://whatsapp.com/channel/0029VbE3FdeGZNCjob8ShJ3l
-// 
-// 🍁 Notes :
-// Mohon untuk tidak menghapus watermark ini.
-// Error fix sendiri.
+// 🍂 Function : Netflix Token Generator - MVNF PRO STABIL RETRY
+// 🌟 Channels : https://whatsapp.com/channel/0029VbE3FdeGZNCjob8ShJ3l
+// 🍁 Notes : Mohon untuk tidak menghapus watermark ini.
 // ---------------------------------------------------------
+export const config = { maxDuration: 60 };
+
 const BASE_URL = 'https://token-netflix.vercel.app'
 const API_URL = `${BASE_URL}/api/generate`
-const TIMEOUT = 30_000
+const TIMEOUT = 25000
+
 const DEFAULT_HEADERS = {
   'Accept': 'application/json, text/event-stream, text/plain, */*',
   'Origin': BASE_URL,
   'Referer': `${BASE_URL}/`,
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
 }
-export function parseSseResponse(rawText) {
-  const events = []
-  const tokens = []
-  let summaryData = null
-  const lines = String(rawText || '').split(/\r?\n/)
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed.startsWith('data:')) continue
-    const jsonStr = trimmed.slice(5).trim()
-    try {
-      const parsed = JSON.parse(jsonStr)
-      events.push(parsed)
-      if (parsed.type === 'token' && parsed.token) tokens.push(parsed.token)
-      else if (parsed.type === 'done' && parsed.summary) summaryData = parsed.summary
-    } catch (_) {}
-  }
-  const finalTokens = summaryData?.data?.length ? summaryData.data : tokens
-  const formattedItems = finalTokens.map((item, idx) => ({
-    index: item.index ?? idx + 1,
-    id: item.id || '-',
-    success: Boolean(item.success),
-    token: item.token || '-',
-    expiry: item.expiry || '-',
-    country: item.profile?.country || 'Tidak diketahui',
-    plan: item.profile?.plan || 'Tidak diketahui',
-    pc: item.links?.pc || '-',
-    android: item.links?.android || '-',
-    tv: item.links?.tv || '-',
-    generatedAt: item.generatedAt || '-'
-  }))
-  return { status: formattedItems.length > 0, total: summaryData?.totalRequested ?? formattedItems.length, success_count: summaryData?.successCount ?? formattedItems.length, error_count: summaryData?.errorCount ?? 0, results: formattedItems }
-}
-export async function generateNetflixToken(cookieInput = '') {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT)
-  try {
-    const cleanInput = String(cookieInput || '').trim()
-    let res
-    if (cleanInput) {
-      res = await fetch(API_URL, { method: 'POST', headers: { ...DEFAULT_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ cookie: cleanInput, netflixId: cleanInput, NetflixId: cleanInput }), signal: controller.signal })
-      if (res.status === 405) {
-        const endpoint = new URL(API_URL)
-        endpoint.searchParams.set('cookie', cleanInput)
-        endpoint.searchParams.set('netflixId', cleanInput)
-        res = await fetch(endpoint.toString(), { method: 'GET', headers: DEFAULT_HEADERS, signal: controller.signal })
-      }
-    } else {
-      res = await fetch(API_URL, { method: 'GET', headers: DEFAULT_HEADERS, signal: controller.signal })
-      if (res.status === 405) {
-        res = await fetch(API_URL, { method: 'POST', headers: { ...DEFAULT_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({}), signal: controller.signal })
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Parser SSE SUPER ROBUST - nangkep semua bentuk token
+function parseSseResponse(rawText) {
+  const items = [];
+  const seen = new Set();
+  const pushItem = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    // Bentuk 1: { token, expiry, links, profile }
+    // Bentuk 2: { data: [{token...}] }
+    // Bentuk 3: { data: {token...} }
+    const candidates = [];
+    if (obj.token) candidates.push(obj);
+    if (Array.isArray(obj.data)) candidates.push(...obj.data);
+    if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data) && obj.data.token) candidates.push(obj.data);
+    if (obj.summary?.data && Array.isArray(obj.summary.data)) candidates.push(...obj.summary.data);
+    if (obj.result && typeof obj.result === 'object' && obj.result.token) candidates.push(obj.result);
+    for (const c of candidates) {
+      const token = c.token || c.accessToken || c.cookie || null;
+      if (!token || token === '-' || seen.has(token)) continue;
+      seen.add(token);
+      items.push({
+        token,
+        expiry: c.expiry || c.expired || c.expiresAt || c.expire || '-',
+        country: c.profile?.country || c.country || 'Tidak diketahui',
+        plan: c.profile?.plan || c.plan || 'Tidak diketahui',
+        pc: c.links?.pc || c.pc || c.pcLink || '-',
+        android: c.links?.android || c.android || c.androidLink || '-',
+        tv: c.links?.tv || c.tv || c.tvLink || '-',
+      });
+    }
+  };
+
+  const text = String(rawText || '');
+  // 1. Parse per line data:
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (t.startsWith('data:')) {
+      const jsonStr = t.slice(5).trim();
+      if (!jsonStr || jsonStr === '[DONE]') continue;
+      try { pushItem(JSON.parse(jsonStr)); } catch {
+        // Kadang token mentah tanpa JSON: data: eyJ...
+        if (jsonStr.length > 50 && !jsonStr.includes(' ')) pushItem({ token: jsonStr });
       }
     }
-    const rawText = await res.text()
-    if (!res.ok) throw new Error(`API Error HTTP ${res.status}: ${rawText.slice(0, 300)}`)
-    if (rawText.includes('data:')) return parseSseResponse(rawText)
-    let data = null; try { data = JSON.parse(rawText) } catch (_) {}
-    return data || { result: rawText }
-  } finally { clearTimeout(timer) }
+  }
+  // 2. Kalau bukan SSE, coba parse JSON utuh
+  if (items.length === 0) {
+    try { pushItem(JSON.parse(text)); } catch {}
+  }
+  // 3. Kalau masih kosong, cari token pakai regex darurat
+  if (items.length === 0) {
+    const m = text.match(/"token"\s*:\s*"([^"]{20,})"/);
+    if (m) pushItem({ token: m[1] });
+  }
+  return items;
 }
+
+async function fetchOnce(cookieInput) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT);
+  try {
+    const clean = String(cookieInput || '').trim();
+    let res;
+    if (clean) {
+      res = await fetch(API_URL, { method: 'POST', headers: { ...DEFAULT_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ cookie: clean, netflixId: clean, NetflixId: clean }), signal: controller.signal });
+      if (res.status === 405) {
+        const u = new URL(API_URL); u.searchParams.set('cookie', clean); u.searchParams.set('netflixId', clean);
+        res = await fetch(u.toString(), { method: 'GET', headers: DEFAULT_HEADERS, signal: controller.signal });
+      }
+    } else {
+      res = await fetch(API_URL, { method: 'GET', headers: DEFAULT_HEADERS, signal: controller.signal });
+      if (res.status === 405) {
+        res = await fetch(API_URL, { method: 'POST', headers: { ...DEFAULT_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({}), signal: controller.signal });
+      }
+    }
+    const raw = await res.text();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return parseSseResponse(raw);
+  } finally { clearTimeout(timer); }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Type", "application/json");
   if (req.method !== "GET" && req.method !== "POST") return res.status(405).json({ status: false, message: "Method not allowed" });
-  try {
-    let cookie = "";
-    if (req.method === "POST") {
-      const b = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body || "{}"); } catch { return {}; } })() : (req.body || {});
-      cookie = b.cookie || b.netflixId || "";
-    } else cookie = req.query.cookie || req.query.netflixId || "";
-    const result = await generateNetflixToken(cookie);
-    if (result?.results?.length) {
-      const item = result.results[0];
-      if (!item.token || item.token === "-") return res.status(502).json({ status: false, message: "Token gagal dibuat. Stok habis / coba lagi." });
-      return res.status(200).json({ status: true, token: item.token, expiry: item.expiry, expired: item.expiry, pcLink: item.pc, androidLink: item.android, tvLink: item.tv, type: "cookie", profile: { country: item.country, plan: item.plan }, raw: result });
+
+  let cookie = "";
+  if (req.method === "POST") {
+    const b = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body || "{}"); } catch { return {}; } })() : (req.body || {});
+    cookie = b.cookie || b.netflixId || "";
+  } else cookie = req.query.cookie || req.query.netflixId || "";
+
+  // RETRY 3x OTOMATIS - ini kunci stabilnya
+  let lastErr = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const items = await fetchOnce(cookie);
+      if (items.length > 0 && items[0].token && items[0].token !== '-') {
+        const item = items[0];
+        return res.status(200).json({
+          status: true,
+          token: item.token,
+          expiry: item.expiry,
+          expired: item.expiry,
+          pcLink: item.pc !== '-' ? item.pc : null,
+          androidLink: item.android !== '-' ? item.android : null,
+          tvLink: item.tv !== '-' ? item.tv : null,
+          type: "cookie",
+          profile: { country: item.country, plan: item.plan },
+          attempt,
+          raw: { results: items }
+        });
+      }
+      lastErr = "Token kosong";
+    } catch (e) {
+      lastErr = e.message || "Fetch gagal";
     }
-    if (result?.data && Array.isArray(result.data) && result.data[0]?.token) {
-      const item = result.data[0];
-      return res.status(200).json({ status: true, token: item.token, expiry: item.expiry, expired: item.expiry, pcLink: item.links?.pc || null, androidLink: item.links?.android || null, tvLink: item.links?.tv || null, type: item.type || "cookie", profile: item.profile || null, raw: result });
-    }
-    return res.status(502).json({ status: false, message: "API Netflix tidak mengembalikan token. Coba lagi." });
-  } catch (e) {
-    return res.status(502).json({ status: false, message: e.message?.slice(0, 200) || "Gagal terhubung ke API Netflix." });
+    if (attempt < 3) await sleep(1200 * attempt); // jeda 1.2s, 2.4s biar server nafas
   }
+
+  return res.status(502).json({ status: false, message: `Server Netflix lagi padat, coba lagi 30 detik. (${lastErr})` });
 }
