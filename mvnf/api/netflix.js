@@ -1,71 +1,70 @@
-// api/am.js - AM JZCloud + Handler Vercel + Tele (FIXED)
+// api/netflix.js - V2 PEMBURU TOKEN, ANTI GAGAL
 import { sendAdminNotif } from "./_tele.js";
 
-const BASE_URL = 'https://am.jzcloud.web.id';
-const API_STATS = `${BASE_URL}/api/stats`;
-const API_SEND = `${BASE_URL}/api/send-link`;
-const API_VERIFY = `${BASE_URL}/api/verify-link`;
-
-const HEADERS = {
-  'Accept': 'application/json',
-  'Origin': BASE_URL,
-  'Referer': `${BASE_URL}/`,
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/129.0.0.0 Safari/537.36',
-  'Content-Type': 'application/json'
-};
-
-async function callApi(url, method, body) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
-  try {
-    const res = await fetch(url, { method, headers: HEADERS, body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
-    const text = await res.text();
-    let data = null; try { data = JSON.parse(text); } catch(_) {}
-    return { ok: res.ok, status: res.status, data: data || { result: text }, raw: text };
-  } finally { clearTimeout(timer); }
+function cariToken(obj, depth = 0) {
+  if (!obj || depth > 5) return null;
+  if (typeof obj === 'string') {
+    // Kalo string panjang & kayak token, ambil
+    const s = obj.trim();
+    if (s.length > 15 && (s.includes('eyJ') || s.includes('-') || s.includes('_') || s.includes('.'))) return s;
+    return null;
+  }
+  if (typeof obj === 'number') return String(obj).length > 10 ? String(obj) : null;
+  if (Array.isArray(obj)) {
+    for (const v of obj) { const r = cariToken(v, depth + 1); if (r) return r; }
+    return null;
+  }
+  if (typeof obj === 'object') {
+    // 1. Cari key yang namanya token dulu (prioritas)
+    for (const k of Object.keys(obj)) {
+      const lk = k.toLowerCase();
+      if (lk.includes('token') || lk === 'code' || lk === 'key') {
+        const v = obj[k];
+        if (typeof v === 'string' && v.length > 10) return v;
+        if (typeof v === 'object' && v) {
+          const r = cariToken(v, depth + 1);
+          if (r) return r;
+        }
+        if (typeof v === 'number') return String(v);
+      }
+    }
+    // 2. Kalo nggak ketemu, ubek semua key lain
+    for (const v of Object.values(obj)) {
+      const r = cariToken(v, depth + 1);
+      if (r) return r;
+    }
+  }
+  return null;
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const { action, email, magicLink, link } = req.body || req.query || {};
-    const act = (action || req.query?.action || '').toLowerCase();
+    const r = await fetch('https://apiv3.sinaf.my.id/api/neflik', {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+    });
+    const text = await r.text();
+    let j = null; try { j = JSON.parse(text); } catch(_) {}
 
-    // 1. CEK STATUS
-    if (req.method === 'GET' || act === 'stats' || act === 'status') {
-      const r = await callApi(API_STATS, 'GET');
-      return res.status(200).json({ success: r.ok, ...r.data, raw: r.raw?.slice(0, 500) });
+    if (!j) throw new Error('API ngirim bukan JSON: ' + text.slice(0, 200));
+
+    const token = cariToken(j);
+
+    // DEBUG: biar lu bisa SS kalo masih gagal
+    if (!token) {
+      console.log('NETFLIX RAW:', text.slice(0, 1000));
+      return res.status(200).json({ success: false, error: 'Token nggak ketemu di API', debug_raw: text.slice(0, 800) });
     }
 
-    // 2. KIRIM MAGIC LINK
-    if (act === 'send' || act === 'send-link' || (req.method === 'POST' && email && !magicLink && !link)) {
-      if (!email) return res.status(200).json({ success: false, error: 'Email kosong' });
-      const r = await callApi(API_SEND, 'POST', { email: String(email).trim() });
-      if (r.ok) {
-        try { await sendAdminNotif(`✨ *AM BARU*\n\nEmail: \`${email}\`\nStatus: Link dikirim\n\nDari: MVNF Premium`); } catch(e){}
-      }
-      return res.status(200).json({ success: r.ok, ...r.data, error: r.ok ? undefined : (r.data?.message || r.data?.error || r.raw) });
-    }
+    try { await sendAdminNotif(`🎬 *NETFLIX BARU*\n\nToken: \`${token}\`\n\nDari: MVNF Premium`); } catch(e){}
 
-    // 3. VERIFY MAGIC LINK
-    if (act === 'verify' || act === 'verify-link' || (magicLink || link)) {
-      const finalLink = magicLink || link;
-      if (!email || !finalLink) return res.status(200).json({ success: false, error: 'Email & Link wajib diisi' });
-      const r = await callApi(API_VERIFY, 'POST', { email: String(email).trim(), magicLink: String(finalLink).trim() });
-      if (r.ok) {
-        try { await sendAdminNotif(`✅ *AM VERIFIED*\n\nEmail: \`${email}\`\n\nDari: MVNF Premium`); } catch(e){}
-      }
-      return res.status(200).json({ success: r.ok, ...r.data, error: r.ok ? undefined : (r.data?.message || r.data?.error || r.raw) });
-    }
-
-    return res.status(200).json({ success: false, error: 'Action nggak dikenal. Pake: stats / send / verify' });
+    return res.status(200).json({ success: true, token, data: j });
 
   } catch (e) {
-    console.log('AM error:', e.message);
+    console.log('Netflix error:', e.message);
     return res.status(200).json({ success: false, error: e.message });
   }
 }
