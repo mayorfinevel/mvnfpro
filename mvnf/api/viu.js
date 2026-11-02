@@ -1,10 +1,16 @@
-// api/viu.js - MVNF PRO FIX 405 STABIL
+// api/viu.js - MVNF PRO FIX 422 ID PERANGKAT TIDAK VALID
 import { randomBytes, createHash } from 'node:crypto';
 
-function makeDeviceId(seed) {
-  if (seed) return createHash('md5').update(String(seed)).digest('hex');
-  return randomBytes(16).toString('hex');
+function md5(s) { return createHash('md5').update(String(s)).digest('hex'); }
+
+// Ubah device_id apapun (mvnf-xxx, dll) jadi UUID valid kayak HP asli
+// Contoh: mvnf-abc123 -> a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5
+function toUUID(seed) {
+  const h = md5(seed || randomBytes(16).toString('hex'));
+  return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;
 }
+function toHex32(seed) { return md5(seed || randomBytes(16).toString('hex')); }
+function toHex16(seed) { return md5(seed || randomBytes(16).toString('hex')).slice(0,16); }
 
 async function tryFetch(url, options) {
   try {
@@ -14,11 +20,10 @@ async function tryFetch(url, options) {
     try { data = JSON.parse(raw); } catch {}
     return { status: r.status, ok: r.ok, raw, data };
   } catch (e) {
-    return { status: 0, ok: false, raw: e.message, data: null, err: e.message };
+    return { status: 0, ok: false, raw: e.message, data: null };
   }
 }
 
-// Normalisasi semua bentuk response VIU
 function normalize(data, devId) {
   if (!data) return null;
   const acc = data.account || data.data?.account || data.data || {};
@@ -45,50 +50,49 @@ export default async function handler(req, res) {
   }
 
   const body = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body); } catch { return {}; } })() : (req.body || {});
-  const devId = (typeof body.deviceId === "string" && body.deviceId.trim()) ? body.deviceId.trim() : makeDeviceId();
-  const queryDevId = typeof req.query?.deviceId === "string" ? req.query.deviceId : devId;
+  const rawId = (typeof body.deviceId === "string" && body.deviceId.trim()) ? body.deviceId.trim() : (typeof body.device_id === "string" ? body.device_id.trim() : "") || `mvnf-${Date.now()}-${randomBytes(4).toString('hex')}`;
+
+  // 3 VARIAN FORMAT - dicoba satu-satu sampai ada yang diterima server
+  const uuid = toUUID(rawId);
+  const hex32 = toHex32(rawId);
+  const hex16 = toHex16(rawId);
 
   const BASE = 'https://viu.interflazz.my.id';
-  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0 Safari/537.36';
+  const UA = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/128.0.0.0 Mobile Safari/537.36';
 
-  // URUTAN COBA: GET dulu (yang diizinkan server), baru POST
   const attempts = [
-    // 1. GET + device_id di query - ini yang paling sering work
-    { url: `${BASE}/?action=account&device_id=${encodeURIComponent(devId)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
-    // 2. GET tanpa device_id
-    { url: `${BASE}/?action=account`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
-    // 3. GET pakai deviceId camelCase
-    { url: `${BASE}/?action=account&deviceId=${encodeURIComponent(devId)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json' } } },
-    // 4. POST JSON device_id
-    { url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Origin': BASE, 'Referer': `${BASE}/` }, body: JSON.stringify({ device_id: devId }) } },
-    // 5. POST JSON deviceId + device_id
-    { url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Origin': BASE, 'Referer': `${BASE}/` }, body: JSON.stringify({ deviceId: devId, device_id: devId }) } },
-    // 6. POST form-urlencoded
-    { url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': BASE, 'Referer': `${BASE}/` }, body: `device_id=${encodeURIComponent(devId)}` } },
+    // 1. GET + UUID (paling sering diterima VIU)
+    { dev: uuid, url: `${BASE}/?action=account&device_id=${encodeURIComponent(uuid)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
+    // 2. GET + hex32
+    { dev: hex32, url: `${BASE}/?action=account&device_id=${encodeURIComponent(hex32)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
+    // 3. GET + hex16 (Android ID asli formatnya 16 hex)
+    { dev: hex16, url: `${BASE}/?action=account&device_id=${encodeURIComponent(hex16)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
+    // 4. GET tanpa device_id - biar server yang bikinin
+    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
+    // 5. POST + UUID
+    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Origin': BASE, 'Referer': `${BASE}/` }, body: JSON.stringify({ device_id: uuid }) } },
+    // 6. POST + UUID + deviceId + device_id semua dikirim
+    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Origin': BASE, 'Referer': `${BASE}/` }, body: JSON.stringify({ device_id: uuid, deviceId: uuid, deviceID: uuid, android_id: hex16 }) } },
+    // 7. POST form + UUID
+    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': BASE, 'Referer': `${BASE}/` }, body: `device_id=${encodeURIComponent(uuid)}` } },
   ];
 
-  let lastErr = "Unknown";
+  let lastErr = "";
   for (const a of attempts) {
     const r = await tryFetch(a.url, a.opts);
-    // Kalau 405 / 422 / 404, lanjut ke cara berikutnya, jangan langsung nyerah
     if (r.status === 405 || r.status === 422 || r.status === 404 || r.status === 0) {
-      lastErr = `HTTP ${r.status} - ${(r.data?.message || r.raw || "").slice(0, 100)}`;
-      continue;
+      lastErr = `HTTP ${r.status} - ${(r.data?.message || r.data?.error || r.raw || "").slice(0, 120)}`;
+      continue; // jangan nyerah, coba format berikutnya
     }
-    if (!r.ok) {
-      lastErr = `HTTP ${r.status} - ${(r.data?.message || r.raw || "").slice(0, 100)}`;
-      continue;
-    }
-    // Cek sukses dalam berbagai bentuk
-    if (r.data?.success === true || r.data?.status === true || r.data?.account) {
-      const norm = normalize(r.data, devId);
+    if (!r.ok) { lastErr = `HTTP ${r.status} - ${(r.data?.message || r.raw || "").slice(0, 120)}`; continue; }
+    if (r.data?.success === true || r.data?.status === true || r.data?.account || r.data?.email) {
+      const norm = normalize(r.data, a.dev);
       if (norm) return res.status(200).json(norm);
     }
-    // Kalau data ada tapi format beda, tetap coba normalisasi
-    const norm2 = normalize(r.data, devId);
+    const norm2 = normalize(r.data, a.dev);
     if (norm2) return res.status(200).json(norm2);
     lastErr = r.data?.message || r.raw?.slice(0, 120) || "Response kosong";
   }
 
-  return res.status(502).json({ success: false, message: `API VIU lagi sibuk / semua metode gagal. Terakhir: ${lastErr}. Coba lagi 1 menit.` });
+  return res.status(502).json({ success: false, message: `API VIU nolak semua format device_id. Terakhir: ${lastErr}` });
 }
