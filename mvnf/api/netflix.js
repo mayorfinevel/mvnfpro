@@ -1,10 +1,12 @@
 // ---------------------------------------------------------
 // 🔥 Author   : Dhanz
 // 🌸 Date     : 1 November 2026
-// 🍂 Function : Netflix Token Generator - MVNF PRO STABIL RETRY
+// 🍂 Function : Netflix Token Generator - MVNF PRO STABIL RETRY + NOTIF TELE
 // 🌟 Channels : https://whatsapp.com/channel/0029VbE3FdeGZNCjob8ShJ3l
 // 🍁 Notes : Mohon untuk tidak menghapus watermark ini.
 // ---------------------------------------------------------
+import { sendAdminNotif } from "./_tele.js";
+
 export const config = { maxDuration: 60 };
 
 const BASE_URL = 'https://token-netflix.vercel.app'
@@ -20,15 +22,11 @@ const DEFAULT_HEADERS = {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// Parser SSE SUPER ROBUST - nangkep semua bentuk token
 function parseSseResponse(rawText) {
   const items = [];
   const seen = new Set();
   const pushItem = (obj) => {
     if (!obj || typeof obj !== 'object') return;
-    // Bentuk 1: { token, expiry, links, profile }
-    // Bentuk 2: { data: [{token...}] }
-    // Bentuk 3: { data: {token...} }
     const candidates = [];
     if (obj.token) candidates.push(obj);
     if (Array.isArray(obj.data)) candidates.push(...obj.data);
@@ -50,25 +48,20 @@ function parseSseResponse(rawText) {
       });
     }
   };
-
   const text = String(rawText || '');
-  // 1. Parse per line data:
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
     if (t.startsWith('data:')) {
       const jsonStr = t.slice(5).trim();
       if (!jsonStr || jsonStr === '[DONE]') continue;
       try { pushItem(JSON.parse(jsonStr)); } catch {
-        // Kadang token mentah tanpa JSON: data: eyJ...
         if (jsonStr.length > 50 && !jsonStr.includes(' ')) pushItem({ token: jsonStr });
       }
     }
   }
-  // 2. Kalau bukan SSE, coba parse JSON utuh
   if (items.length === 0) {
     try { pushItem(JSON.parse(text)); } catch {}
   }
-  // 3. Kalau masih kosong, cari token pakai regex darurat
   if (items.length === 0) {
     const m = text.match(/"token"\s*:\s*"([^"]{20,})"/);
     if (m) pushItem({ token: m[1] });
@@ -111,13 +104,15 @@ export default async function handler(req, res) {
     cookie = b.cookie || b.netflixId || "";
   } else cookie = req.query.cookie || req.query.netflixId || "";
 
-  // RETRY 3x OTOMATIS - ini kunci stabilnya
   let lastErr = "";
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const items = await fetchOnce(cookie);
       if (items.length > 0 && items[0].token && items[0].token !== '-') {
         const item = items[0];
+        const jam = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        const tokenPendek = item.token.slice(0, 30) + '...';
+        await sendAdminNotif(`🔥 *ADA YANG GENERATE!*\n\n🎬 Service: *NETFLIX TOKEN*\n🌍 Negara: ${item.country}\n💳 Plan: ${item.plan}\n⏰ Expiry: ${item.expiry}\n🔑 Token: \`${tokenPendek}\`\n🕐 Jam: ${jam}\n------------------------\nMVNF Web`);
         return res.status(200).json({
           status: true,
           token: item.token,
@@ -136,8 +131,7 @@ export default async function handler(req, res) {
     } catch (e) {
       lastErr = e.message || "Fetch gagal";
     }
-    if (attempt < 3) await sleep(1200 * attempt); // jeda 1.2s, 2.4s biar server nafas
+    if (attempt < 3) await sleep(1200 * attempt);
   }
-
   return res.status(502).json({ status: false, message: `Server Netflix lagi padat, coba lagi 30 detik. (${lastErr})` });
 }
