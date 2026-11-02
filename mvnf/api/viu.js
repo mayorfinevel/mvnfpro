@@ -15,22 +15,13 @@ import { randomBytes, createHash } from 'node:crypto'
 const BASE_URL = 'https://viu.interflazz.my.id/?action=account'
 const TIMEOUT = 30_000
 
-/**
- * Membuat Device ID acak atau berbasis seed
- * @param {string|null} seed
- */
 export function generateDeviceId(seed = null) {
   if (seed) return createHash('md5').update(String(seed)).digest('hex')
   return randomBytes(16).toString('hex')
 }
 
-/**
- * Mengambil credential akun VIU Premium dari endpoint
- * @param {string} [deviceId] - Device ID kustom (Opsional)
- */
 export async function requestApi(deviceId = null) {
-  // FIX PENTING: kalau deviceId dari frontend bukan hex32 murni (misal "mvnf-xxx"), ANGGAP TIDAK ADA
-  // Biar generateDeviceId() yang bikin yang valid
+  // FIX: kalau deviceId dari frontend bukan hex32 murni (misal "mvnf-xxx"), anggap ga ada
   const isValidHex32 = typeof deviceId === 'string' && /^[a-f0-9]{32}$/i.test(deviceId.trim());
   const devId = isValidHex32 ? deviceId.trim() : generateDeviceId()
   const controller = new AbortController()
@@ -53,7 +44,7 @@ export async function requestApi(deviceId = null) {
     const rawText = await res.text()
     let data = null; try { data = JSON.parse(rawText) } catch (_) {}
 
-    if (!res.ok) throw new Error(`API Error: HTTP ${res.status} - ${(data?.message || rawText || "").slice(0, 100)}`)
+    if (!res.ok) throw new Error(`API Error: HTTP ${res.status} - ${(data?.message || rawText || "").slice(0, 120)}`)
     if (!data?.success) throw new Error(data?.message || 'Gagal mengambil akun VIU')
 
     return {
@@ -73,7 +64,7 @@ export async function requestApi(deviceId = null) {
   }
 }
 
-// --- Vercel Handler MVNF PRO ---
+// HANYA SATU export default, ini aja. Yang di bawah tadi udah dihapus.
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
@@ -81,12 +72,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: "Method not allowed" });
   }
 
-  // JANGAN PAKAI deviceId dari frontend! Selalu generate fresh hex32 di server
-  // Ini yang bikin 422 kemarin ilang
   let lastErr = "";
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const result = await requestApi(null); // <-- null = generate fresh hex32
+      const result = await requestApi(null); // null = generate fresh hex32
       return res.status(200).json({
         success: true, status: true,
         message: result.message,
@@ -100,14 +89,8 @@ export default async function handler(req, res) {
       });
     } catch (e) {
       lastErr = e.message;
-      // Kalau 422, berarti device_id itu udah kepake / diblokir, coba lagi dengan id baru
       if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
     }
   }
   return res.status(502).json({ success: false, message: `API VIU gagal 3x: ${lastErr}` });
-}
-
-export default {
-  generateDeviceId,
-  requestApi
 }
