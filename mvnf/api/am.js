@@ -1,90 +1,78 @@
-// ============================================================
-// MVNF - api/am.js
-// AM JZCloud - Dhanz + NOTIF TELE
-// BASE langsung tancap, tanpa ENV
-// ============================================================
-
+// api/am.js - AM Premium - MVNF
 import { sendAdminNotif } from "./_tele.js";
 
-export default async function handler(req, res) {
+const BASE_URL = 'https://am.jzcloud.web.id';
+const API_STATS = `${BASE_URL}/api/stats`;
+const API_SEND = `${BASE_URL}/api/send-link`;
+const API_VERIFY = `${BASE_URL}/api/verify-link`;
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({
-      success: false,
-      message: 'Method not allowed'
-    });
+const HEADERS = {
+  'Accept': 'application/json',
+  'Origin': BASE_URL,
+  'Referer': `${BASE_URL}/`,
+  'User-Agent': 'Mozilla/5.0',
+  'Content-Type': 'application/json'
+};
+
+function translateError(msg) {
+  const m = String(msg || '');
+  if (m.includes('QUOTA_EXCEEDED') || m.includes('Exceeded daily quota')) {
+    return 'Jatah kirim email hari ini habis. Coba lagi besok ya, atau chat Admin buat dibantu manual.';
   }
+  if (m.includes('INVALID_EMAIL') || m.includes('invalid-email')) return 'Email-nya nggak valid, cek lagi.';
+  if (m.includes('TOO_MANY')) return 'Kebanyakan request, tunggu 5 menit lagi.';
+  return m.slice(0, 300);
+}
 
-  const { action, email, magicLink } = req.body || {};
+async function callApi(url, method, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(url, { method, headers: HEADERS, body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
+    const text = await res.text();
+    let data = null; try { data = JSON.parse(text); } catch(_) {}
+    return { ok: res.ok, status: res.status, data: data || { result: text }, raw: text };
+  } finally { clearTimeout(timer); }
+}
 
-  // ---------- LANGSUNG TANCAP ----------
-  const BASE = 'https://am.jzcloud.web.id';
-
-  const HEADERS = {
-    'Accept': 'application/json',
-    'Origin': BASE,
-    'Referer': `${BASE}/`,
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
-    'Content-Type': 'application/json'
-  };
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    let url = '';
-    let options = {};
+    const { action, email, magicLink, link } = req.body || req.query || {};
+    const act = (action || req.query?.action || '').toLowerCase();
 
-    if (action === 'stats') {
-      url = `${BASE}/api/stats`;
-      options = { method: 'GET', headers: HEADERS };
-
-    } else if (action === 'send') {
-      url = `${BASE}/api/send-link`;
-      options = {
-        method: 'POST',
-        headers: HEADERS,
-        body: JSON.stringify({ email })
-      };
-
-    } else if (action === 'verify') {
-      url = `${BASE}/api/verify-link`;
-      options = {
-        method: 'POST',
-        headers: HEADERS,
-        body: JSON.stringify({ email, magicLink })
-      };
-
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Action tidak dikenal'
-      });
+    if (req.method === 'GET' || act === 'stats' || act === 'status') {
+      const r = await callApi(API_STATS, 'GET');
+      return res.status(200).json({ success: r.ok, ...r.data, raw: r.raw?.slice(0, 500) });
     }
 
-    const r = await fetch(url, options);
-    const text = await r.text();
-
-    let data = null;
-    try { data = JSON.parse(text); } catch {}
-
-    // 🔥 NOTIF TELE - CUMA PAS VERIFY BERHASIL
-    if (action === 'verify' && r.ok) {
-      const jam = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-      const accEmail = data?.data?.email || data?.email || email || '-';
-      const accPass = data?.data?.password || data?.password || data?.data?.pass || '-';
-      const accToken = data?.data?.token || data?.token || '';
-      const tokenPendek = accToken ? `\n🔑 Token: \`${String(accToken).slice(0, 30)}...\`` : '';
-      await sendAdminNotif(`🔥 *ADA YANG GENERATE!*\n\n🎬 Service: *AM*\n📧 Email: \`${accEmail}\`\n🔑 Pass: \`${accPass}\`${tokenPendek}\n🕐 Jam: ${jam}\n------------------------\nMVNF Web`);
+    if (act === 'send' || act === 'send-link' || (req.method === 'POST' && email && !magicLink && !link)) {
+      if (!email) return res.status(200).json({ success: false, error: 'Email kosong' });
+      const r = await callApi(API_SEND, 'POST', { email: String(email).trim() });
+      if (r.ok) {
+        try { await sendAdminNotif(`✨ *AM BARU*\n\nEmail: \`${email}\`\nStatus: Link dikirim\n\nDari: MVNF Premium`); } catch(e){}
+      }
+      const rawErr = r.data?.message || r.data?.error?.message || r.data?.error || r.raw || '';
+      return res.status(200).json({ success: r.ok, ...r.data, error: r.ok ? undefined : translateError(rawErr) });
     }
 
-    return res.status(200).json({
-      success: r.ok,
-      data: data || text,
-      message: data?.message || data?.error || ''
-    });
+    if (act === 'verify' || act === 'verify-link' || (magicLink || link)) {
+      const finalLink = magicLink || link;
+      if (!email || !finalLink) return res.status(200).json({ success: false, error: 'Email & Link wajib diisi' });
+      const r = await callApi(API_VERIFY, 'POST', { email: String(email).trim(), magicLink: String(finalLink).trim() });
+      if (r.ok) {
+        try { await sendAdminNotif(`✅ *AM VERIFIED*\n\nEmail: \`${email}\`\n\nDari: MVNF Premium`); } catch(e){}
+      }
+      const rawErr = r.data?.message || r.data?.error?.message || r.data?.error || r.raw || '';
+      return res.status(200).json({ success: r.ok, ...r.data, error: r.ok ? undefined : translateError(rawErr) });
+    }
 
+    return res.status(200).json({ success: false, error: 'Action nggak dikenal. Pake: stats / send / verify' });
   } catch (e) {
-    return res.status(500).json({
-      success: false,
-      message: e.message
-    });
+    return res.status(200).json({ success: false, error: translateError(e.message) });
   }
 }
