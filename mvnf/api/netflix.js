@@ -1,137 +1,71 @@
-// ---------------------------------------------------------
-// 🔥 Author   : Dhanz
-// 🌸 Date     : 1 November 2026
-// 🍂 Function : Netflix Token Generator - MVNF PRO STABIL RETRY + NOTIF TELE
-// 🌟 Channels : https://whatsapp.com/channel/0029VbE3FdeGZNCjob8ShJ3l
-// 🍁 Notes : Mohon untuk tidak menghapus watermark ini.
-// ---------------------------------------------------------
+// api/am.js - AM JZCloud + Handler Vercel + Tele (FIXED)
 import { sendAdminNotif } from "./_tele.js";
 
-export const config = { maxDuration: 60 };
+const BASE_URL = 'https://am.jzcloud.web.id';
+const API_STATS = `${BASE_URL}/api/stats`;
+const API_SEND = `${BASE_URL}/api/send-link`;
+const API_VERIFY = `${BASE_URL}/api/verify-link`;
 
-const BASE_URL = 'https://token-netflix.vercel.app'
-const API_URL = `${BASE_URL}/api/generate`
-const TIMEOUT = 25000
-
-const DEFAULT_HEADERS = {
-  'Accept': 'application/json, text/event-stream, text/plain, */*',
+const HEADERS = {
+  'Accept': 'application/json',
   'Origin': BASE_URL,
   'Referer': `${BASE_URL}/`,
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
-}
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/129.0.0.0 Safari/537.36',
+  'Content-Type': 'application/json'
+};
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-function parseSseResponse(rawText) {
-  const items = [];
-  const seen = new Set();
-  const pushItem = (obj) => {
-    if (!obj || typeof obj !== 'object') return;
-    const candidates = [];
-    if (obj.token) candidates.push(obj);
-    if (Array.isArray(obj.data)) candidates.push(...obj.data);
-    if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data) && obj.data.token) candidates.push(obj.data);
-    if (obj.summary?.data && Array.isArray(obj.summary.data)) candidates.push(...obj.summary.data);
-    if (obj.result && typeof obj.result === 'object' && obj.result.token) candidates.push(obj.result);
-    for (const c of candidates) {
-      const token = c.token || c.accessToken || c.cookie || null;
-      if (!token || token === '-' || seen.has(token)) continue;
-      seen.add(token);
-      items.push({
-        token,
-        expiry: c.expiry || c.expired || c.expiresAt || c.expire || '-',
-        country: c.profile?.country || c.country || 'Tidak diketahui',
-        plan: c.profile?.plan || c.plan || 'Tidak diketahui',
-        pc: c.links?.pc || c.pc || c.pcLink || '-',
-        android: c.links?.android || c.android || c.androidLink || '-',
-        tv: c.links?.tv || c.tv || c.tvLink || '-',
-      });
-    }
-  };
-  const text = String(rawText || '');
-  for (const line of text.split(/\r?\n/)) {
-    const t = line.trim();
-    if (t.startsWith('data:')) {
-      const jsonStr = t.slice(5).trim();
-      if (!jsonStr || jsonStr === '[DONE]') continue;
-      try { pushItem(JSON.parse(jsonStr)); } catch {
-        if (jsonStr.length > 50 && !jsonStr.includes(' ')) pushItem({ token: jsonStr });
-      }
-    }
-  }
-  if (items.length === 0) {
-    try { pushItem(JSON.parse(text)); } catch {}
-  }
-  if (items.length === 0) {
-    const m = text.match(/"token"\s*:\s*"([^"]{20,})"/);
-    if (m) pushItem({ token: m[1] });
-  }
-  return items;
-}
-
-async function fetchOnce(cookieInput) {
+async function callApi(url, method, body) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT);
+  const timer = setTimeout(() => controller.abort(), 30000);
   try {
-    const clean = String(cookieInput || '').trim();
-    let res;
-    if (clean) {
-      res = await fetch(API_URL, { method: 'POST', headers: { ...DEFAULT_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ cookie: clean, netflixId: clean, NetflixId: clean }), signal: controller.signal });
-      if (res.status === 405) {
-        const u = new URL(API_URL); u.searchParams.set('cookie', clean); u.searchParams.set('netflixId', clean);
-        res = await fetch(u.toString(), { method: 'GET', headers: DEFAULT_HEADERS, signal: controller.signal });
-      }
-    } else {
-      res = await fetch(API_URL, { method: 'GET', headers: DEFAULT_HEADERS, signal: controller.signal });
-      if (res.status === 405) {
-        res = await fetch(API_URL, { method: 'POST', headers: { ...DEFAULT_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({}), signal: controller.signal });
-      }
-    }
-    const raw = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return parseSseResponse(raw);
+    const res = await fetch(url, { method, headers: HEADERS, body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
+    const text = await res.text();
+    let data = null; try { data = JSON.parse(text); } catch(_) {}
+    return { ok: res.ok, status: res.status, data: data || { result: text }, raw: text };
   } finally { clearTimeout(timer); }
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Cache-Control", "no-store");
-  res.setHeader("Content-Type", "application/json");
-  if (req.method !== "GET" && req.method !== "POST") return res.status(405).json({ status: false, message: "Method not allowed" });
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  let cookie = "";
-  if (req.method === "POST") {
-    const b = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body || "{}"); } catch { return {}; } })() : (req.body || {});
-    cookie = b.cookie || b.netflixId || "";
-  } else cookie = req.query.cookie || req.query.netflixId || "";
+  try {
+    const { action, email, magicLink, link } = req.body || req.query || {};
+    const act = (action || req.query?.action || '').toLowerCase();
 
-  let lastErr = "";
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const items = await fetchOnce(cookie);
-      if (items.length > 0 && items[0].token && items[0].token !== '-') {
-        const item = items[0];
-        const jam = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-        const tokenPendek = item.token.slice(0, 30) + '...';
-        await sendAdminNotif(`🔥 *ADA YANG GENERATE!*\n\n🎬 Service: *NETFLIX TOKEN*\n🌍 Negara: ${item.country}\n💳 Plan: ${item.plan}\n⏰ Expiry: ${item.expiry}\n🔑 Token: \`${tokenPendek}\`\n🕐 Jam: ${jam}\n------------------------\nMVNF Web`);
-        return res.status(200).json({
-          status: true,
-          token: item.token,
-          expiry: item.expiry,
-          expired: item.expiry,
-          pcLink: item.pc !== '-' ? item.pc : null,
-          androidLink: item.android !== '-' ? item.android : null,
-          tvLink: item.tv !== '-' ? item.tv : null,
-          type: "cookie",
-          profile: { country: item.country, plan: item.plan },
-          attempt,
-          raw: { results: items }
-        });
-      }
-      lastErr = "Token kosong";
-    } catch (e) {
-      lastErr = e.message || "Fetch gagal";
+    // 1. CEK STATUS
+    if (req.method === 'GET' || act === 'stats' || act === 'status') {
+      const r = await callApi(API_STATS, 'GET');
+      return res.status(200).json({ success: r.ok, ...r.data, raw: r.raw?.slice(0, 500) });
     }
-    if (attempt < 3) await sleep(1200 * attempt);
+
+    // 2. KIRIM MAGIC LINK
+    if (act === 'send' || act === 'send-link' || (req.method === 'POST' && email && !magicLink && !link)) {
+      if (!email) return res.status(200).json({ success: false, error: 'Email kosong' });
+      const r = await callApi(API_SEND, 'POST', { email: String(email).trim() });
+      if (r.ok) {
+        try { await sendAdminNotif(`✨ *AM BARU*\n\nEmail: \`${email}\`\nStatus: Link dikirim\n\nDari: MVNF Premium`); } catch(e){}
+      }
+      return res.status(200).json({ success: r.ok, ...r.data, error: r.ok ? undefined : (r.data?.message || r.data?.error || r.raw) });
+    }
+
+    // 3. VERIFY MAGIC LINK
+    if (act === 'verify' || act === 'verify-link' || (magicLink || link)) {
+      const finalLink = magicLink || link;
+      if (!email || !finalLink) return res.status(200).json({ success: false, error: 'Email & Link wajib diisi' });
+      const r = await callApi(API_VERIFY, 'POST', { email: String(email).trim(), magicLink: String(finalLink).trim() });
+      if (r.ok) {
+        try { await sendAdminNotif(`✅ *AM VERIFIED*\n\nEmail: \`${email}\`\n\nDari: MVNF Premium`); } catch(e){}
+      }
+      return res.status(200).json({ success: r.ok, ...r.data, error: r.ok ? undefined : (r.data?.message || r.data?.error || r.raw) });
+    }
+
+    return res.status(200).json({ success: false, error: 'Action nggak dikenal. Pake: stats / send / verify' });
+
+  } catch (e) {
+    console.log('AM error:', e.message);
+    return res.status(200).json({ success: false, error: e.message });
   }
-  return res.status(502).json({ status: false, message: `Server Netflix lagi padat, coba lagi 30 detik. (${lastErr})` });
 }
