@@ -1,47 +1,79 @@
-// api/viu.js - MVNF PRO FIX 422 ID PERANGKAT TIDAK VALID
-import { randomBytes, createHash } from 'node:crypto';
+// ---------------------------------------------------------
+// 🔥 Author   : Dhanz (https://t.me/ktzckmy)
+// 🌸 Date     : 23 Oktober 2026
+// 🍂 Function : VIU Premium Account Base Module (ESM) - Adapted for MVNF PRO
+// 🌟 Channels : 
+//  - https://whatsapp.com/channel/0029VbE3FdeGZNCjob8ShJ3l
+// 
+// 🍁 Notes :
+// Mohon untuk tidak menghapus watermark ini. 
+// Error fix sendiri.
+// ---------------------------------------------------------
 
-function md5(s) { return createHash('md5').update(String(s)).digest('hex'); }
+import { randomBytes, createHash } from 'node:crypto'
 
-// Ubah device_id apapun (mvnf-xxx, dll) jadi UUID valid kayak HP asli
-// Contoh: mvnf-abc123 -> a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5
-function toUUID(seed) {
-  const h = md5(seed || randomBytes(16).toString('hex'));
-  return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;
+const BASE_URL = 'https://viu.interflazz.my.id/?action=account'
+const TIMEOUT = 30_000
+
+/**
+ * Membuat Device ID acak atau berbasis seed
+ * @param {string|null} seed
+ */
+export function generateDeviceId(seed = null) {
+  if (seed) return createHash('md5').update(String(seed)).digest('hex')
+  return randomBytes(16).toString('hex')
 }
-function toHex32(seed) { return md5(seed || randomBytes(16).toString('hex')); }
-function toHex16(seed) { return md5(seed || randomBytes(16).toString('hex')).slice(0,16); }
 
-async function tryFetch(url, options) {
+/**
+ * Mengambil credential akun VIU Premium dari endpoint
+ * @param {string} [deviceId] - Device ID kustom (Opsional)
+ */
+export async function requestApi(deviceId = null) {
+  // FIX PENTING: kalau deviceId dari frontend bukan hex32 murni (misal "mvnf-xxx"), ANGGAP TIDAK ADA
+  // Biar generateDeviceId() yang bikin yang valid
+  const isValidHex32 = typeof deviceId === 'string' && /^[a-f0-9]{32}$/i.test(deviceId.trim());
+  const devId = isValidHex32 ? deviceId.trim() : generateDeviceId()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT)
+
   try {
-    const r = await fetch(url, options);
-    const raw = await r.text();
-    let data = null;
-    try { data = JSON.parse(raw); } catch {}
-    return { status: r.status, ok: r.ok, raw, data };
-  } catch (e) {
-    return { status: 0, ok: false, raw: e.message, data: null };
+    const res = await fetch(BASE_URL, {
+      method: 'POST',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Origin': 'https://viu.interflazz.my.id',
+        'Referer': 'https://viu.interflazz.my.id/'
+      },
+      body: JSON.stringify({ device_id: devId }),
+      signal: controller.signal
+    })
+
+    const rawText = await res.text()
+    let data = null; try { data = JSON.parse(rawText) } catch (_) {}
+
+    if (!res.ok) throw new Error(`API Error: HTTP ${res.status} - ${(data?.message || rawText || "").slice(0, 100)}`)
+    if (!data?.success) throw new Error(data?.message || 'Gagal mengambil akun VIU')
+
+    return {
+      status: true,
+      message: data.message,
+      is_new: data.is_new,
+      device_id: data.device_id || devId,
+      account: {
+        email: data.account?.email ?? null,
+        password: data.account?.password ?? null
+      },
+      fetched_at: new Date().toISOString(),
+      raw_data: data
+    }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
-function normalize(data, devId) {
-  if (!data) return null;
-  const acc = data.account || data.data?.account || data.data || {};
-  const email = data.email || acc.email || data.data?.email || null;
-  const password = data.password || acc.password || data.data?.password || null;
-  if (!email) return null;
-  return {
-    success: true, status: true,
-    message: data.message || "Akun VIU berhasil dibuat",
-    is_new: data.is_new ?? true,
-    device_id: data.device_id || devId,
-    email, password,
-    account: { email, password },
-    fetched_at: new Date().toISOString(),
-    raw: data
-  };
-}
-
+// --- Vercel Handler MVNF PRO ---
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
@@ -49,50 +81,33 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: "Method not allowed" });
   }
 
-  const body = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body); } catch { return {}; } })() : (req.body || {});
-  const rawId = (typeof body.deviceId === "string" && body.deviceId.trim()) ? body.deviceId.trim() : (typeof body.device_id === "string" ? body.device_id.trim() : "") || `mvnf-${Date.now()}-${randomBytes(4).toString('hex')}`;
-
-  // 3 VARIAN FORMAT - dicoba satu-satu sampai ada yang diterima server
-  const uuid = toUUID(rawId);
-  const hex32 = toHex32(rawId);
-  const hex16 = toHex16(rawId);
-
-  const BASE = 'https://viu.interflazz.my.id';
-  const UA = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/128.0.0.0 Mobile Safari/537.36';
-
-  const attempts = [
-    // 1. GET + UUID (paling sering diterima VIU)
-    { dev: uuid, url: `${BASE}/?action=account&device_id=${encodeURIComponent(uuid)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
-    // 2. GET + hex32
-    { dev: hex32, url: `${BASE}/?action=account&device_id=${encodeURIComponent(hex32)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
-    // 3. GET + hex16 (Android ID asli formatnya 16 hex)
-    { dev: hex16, url: `${BASE}/?action=account&device_id=${encodeURIComponent(hex16)}`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
-    // 4. GET tanpa device_id - biar server yang bikinin
-    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "GET", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': `${BASE}/` } } },
-    // 5. POST + UUID
-    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Origin': BASE, 'Referer': `${BASE}/` }, body: JSON.stringify({ device_id: uuid }) } },
-    // 6. POST + UUID + deviceId + device_id semua dikirim
-    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Origin': BASE, 'Referer': `${BASE}/` }, body: JSON.stringify({ device_id: uuid, deviceId: uuid, deviceID: uuid, android_id: hex16 }) } },
-    // 7. POST form + UUID
-    { dev: uuid, url: `${BASE}/?action=account`, opts: { method: "POST", headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'Origin': BASE, 'Referer': `${BASE}/` }, body: `device_id=${encodeURIComponent(uuid)}` } },
-  ];
-
+  // JANGAN PAKAI deviceId dari frontend! Selalu generate fresh hex32 di server
+  // Ini yang bikin 422 kemarin ilang
   let lastErr = "";
-  for (const a of attempts) {
-    const r = await tryFetch(a.url, a.opts);
-    if (r.status === 405 || r.status === 422 || r.status === 404 || r.status === 0) {
-      lastErr = `HTTP ${r.status} - ${(r.data?.message || r.data?.error || r.raw || "").slice(0, 120)}`;
-      continue; // jangan nyerah, coba format berikutnya
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const result = await requestApi(null); // <-- null = generate fresh hex32
+      return res.status(200).json({
+        success: true, status: true,
+        message: result.message,
+        is_new: result.is_new,
+        device_id: result.device_id,
+        email: result.account.email,
+        password: result.account.password,
+        account: result.account,
+        fetched_at: result.fetched_at,
+        raw: result.raw_data
+      });
+    } catch (e) {
+      lastErr = e.message;
+      // Kalau 422, berarti device_id itu udah kepake / diblokir, coba lagi dengan id baru
+      if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
     }
-    if (!r.ok) { lastErr = `HTTP ${r.status} - ${(r.data?.message || r.raw || "").slice(0, 120)}`; continue; }
-    if (r.data?.success === true || r.data?.status === true || r.data?.account || r.data?.email) {
-      const norm = normalize(r.data, a.dev);
-      if (norm) return res.status(200).json(norm);
-    }
-    const norm2 = normalize(r.data, a.dev);
-    if (norm2) return res.status(200).json(norm2);
-    lastErr = r.data?.message || r.raw?.slice(0, 120) || "Response kosong";
   }
+  return res.status(502).json({ success: false, message: `API VIU gagal 3x: ${lastErr}` });
+}
 
-  return res.status(502).json({ success: false, message: `API VIU nolak semua format device_id. Terakhir: ${lastErr}` });
+export default {
+  generateDeviceId,
+  requestApi
 }
