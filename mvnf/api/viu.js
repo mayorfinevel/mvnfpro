@@ -1,7 +1,7 @@
 // ---------------------------------------------------------
 // 🔥 Author   : Dhanz (https://t.me/ktzckmy)
 // 🌸 Date     : 23 Oktober 2026
-// 🍂 Function : VIU Premium Account Base Module (ESM) - Adapted for MVNF PRO
+// 🍂 Function : VIU Premium Account Base Module (ESM) - Adapted for MVNF PRO + NOTIF TELE
 // 🌟 Channels : 
 //  - https://whatsapp.com/channel/0029VbE3FdeGZNCjob8ShJ3l
 // 
@@ -11,6 +11,7 @@
 // ---------------------------------------------------------
 
 import { randomBytes, createHash } from 'node:crypto'
+import { sendAdminNotif } from "./_tele.js"
 
 const BASE_URL = 'https://viu.interflazz.my.id/?action=account'
 const TIMEOUT = 30_000
@@ -21,7 +22,6 @@ export function generateDeviceId(seed = null) {
 }
 
 export async function requestApi(deviceId = null) {
-  // FIX: kalau deviceId dari frontend bukan hex32 murni (misal "mvnf-xxx"), anggap ga ada
   const isValidHex32 = typeof deviceId === 'string' && /^[a-f0-9]{32}$/i.test(deviceId.trim());
   const devId = isValidHex32 ? deviceId.trim() : generateDeviceId()
   const controller = new AbortController()
@@ -64,7 +64,6 @@ export async function requestApi(deviceId = null) {
   }
 }
 
-// HANYA SATU export default, ini aja. Yang di bawah tadi udah dihapus.
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
@@ -75,7 +74,12 @@ export default async function handler(req, res) {
   let lastErr = "";
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const result = await requestApi(null); // null = generate fresh hex32
+      const result = await requestApi(null);
+
+      // 🔥 NOTIF TELE - JANGAN DIHAPUS
+      const jam = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+      await sendAdminNotif(`🔥 *ADA YANG GENERATE!*\n\n🎬 Service: *VIU*\n📧 Email: \`${result.account.email || '-'}\`\n🔑 Pass: \`${result.account.password || '-'}\`\n🆕 Is New: ${result.is_new ? 'Ya' : 'Tidak'}\n🕐 Jam: ${jam}\n------------------------\nMVNF Web`);
+
       return res.status(200).json({
         success: true, status: true,
         message: result.message,
