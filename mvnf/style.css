@@ -36,26 +36,11 @@ html[data-theme="light"] {
 }
 
 /* ---------- ANIMASI ---------- */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes popIn {
-  from { opacity: 0; transform: scale(.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-@keyframes splashBar {
-  from { width: 0%; }
-  to { width: 100%; }
-}
-@keyframes splashOut {
-  to { opacity: 0; visibility: hidden; }
-}
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
-}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes popIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes splashBar { from { width: 0%; } to { width: 100%; } }
+@keyframes splashOut { to { opacity: 0; visibility: hidden; } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 .anim-in { animation: fadeUp .55s ease both; }
 .delay-1 { animation-delay: .08s; }
 .delay-2 { animation-delay: .16s; }
@@ -63,16 +48,9 @@ html[data-theme="light"] {
 .shake { animation: shake .3s ease; }
 
 /* ---------- SPLASH ---------- */
-.splash {
-  position: fixed; inset: 0; z-index: 9999;
-  background: #0c0a08; color: #fff;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-}
+.splash { position: fixed; inset: 0; z-index: 9999; background: #0c0a08; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 .splash.hide { animation: splashOut .4s ease forwards; }
-.splash-logo {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 72px; font-weight: 700; letter-spacing: 2px; line-height: 1;
-}
+.splash-logo { font-family: 'Cormorant Garamond', serif; font-size: 72px; font-weight: 700; letter-spacing: 2px; line-height: 1; }
 .splash-logo::after { content: "."; color: #e50914; }
 .splash-sub { font-size: 10px; letter-spacing: 4px; color: rgba(255,255,255,.7); }
 .splash-bar { width: 140px; height: 3px; background: rgba(255,255,255,.2); border-radius: 99px; overflow: hidden; margin-top: 14px; }
@@ -81,16 +59,8 @@ html[data-theme="light"] {
 /* ---------- RESET ---------- */
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
-body {
-  min-height: 100vh; color: var(--text);
-  font-family: Manrope, system-ui, sans-serif;
-  overflow-x: hidden; background: var(--bg);
-  transition: background .3s, color .3s;
-}
-body::before {
-  content: ""; position: fixed; inset: 0; z-index: -1;
-  background: var(--overlay), url('/bg.jpg') center / cover no-repeat;
-}
+body { min-height: 100vh; color: var(--text); font-family: Manrope, system-ui, sans-serif; overflow-x: hidden; background: var(--bg); transition: background .3s, color .3s; }
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: var(--overlay), url('/bg.jpg') center / cover no-repeat; }
 
 /* ---------- TOPBAR ---------- */
 .topbar { height: 64px; max-width: 1120px; padding: 0 22px; margin: auto; display: flex; align-items: center; justify-content: space-between; }
@@ -139,8 +109,6 @@ html[data-theme="light"] .secondary-btn { background: rgba(0,0,0,.05); }
 /* ---------- PESAN ---------- */
 .message { font-size: 11px; text-align: center; color: var(--msg); margin: 10px 0 0; }
 .message:empty { display: none; }
-.cooldown { font-size: 11px; text-align: center; color: #f59e0b; margin: 8px 0 0; font-weight: 700; }
-.cooldown:empty { display: none; }
 .hidden { display: none !important; }
 
 /* ---------- HASIL ---------- */
@@ -157,15 +125,38 @@ html[data-theme="light"] .secondary-btn { background: rgba(0,0,0,.05); }
 .copy-btn { border: 1px solid var(--copy-border); background: var(--copy-bg); color: var(--text); border-radius: 999px; padding: 7px 11px; font: 600 10px Manrope, sans-serif; cursor: pointer; white-space: nowrap; }
 html[data-theme="light"] .copy-btn { color: #fff; }
 
-/* ---------- LINK LIST ---------- */
+/* ---------- LINK LIST & TOMBOL COPY LINK ---------- */
 .link-list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card-dark-2); }
-.link-item { display: flex; align-items: center; gap: 8px; padding: 11px; border-bottom: 1px solid var(--line-2); }
+.link-item { display: flex; align-items: center; gap: 8px; padding: 11px; border-bottom: 1px solid var(--line-2); justify-content: space-between; }
 .link-item:last-child { border-bottom: 0; }
 .device { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }
 .device > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--device-icon-bg); font-size: 14px; }
 .device strong { display: block; font-size: 11px; }
 .device small { display: block; font-size: 9px; color: var(--text-faint); margin-top: 3px; }
-.open-link { font-size: 10px; color: var(--open-link); text-decoration: none; white-space: nowrap; }
+
+/* Container Tombol Copy & Buka */
+.link-actions { display: flex; align-items: center; gap: 6px; }
+
+/* Tombol Copy Link */
+.copy-link-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.copy-link-btn:hover { background: var(--device-icon-bg); }
+.copy-link-btn.success { background: #1b5e20; color: #a5d6a7; border-color: #2e7d32; }
+
+/* Tombol Buka */
+.open-link { font-size: 10px; color: var(--open-link); text-decoration: none; white-space: nowrap; font-weight: 700; padding: 5px 8px; border-radius: 6px; transition: 0.2s; }
+.open-link:hover { background: var(--device-icon-bg); }
+
 .result-foot { display: flex; justify-content: space-between; padding-top: 12px; font-size: 9px; color: var(--text-dim); }
 .text-btn { background: none; border: 0; color: var(--text); font-size: 10px; cursor: pointer; }
 
