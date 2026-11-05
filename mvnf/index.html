@@ -80,17 +80,28 @@
           <div class="link-item">
             <div class="device"><span>💻</span><div><strong>PC / Laptop</strong><small>Browser</small></div></div>
             <input type="hidden" id="pcLink">
-            <a id="pcOpen" href="#" target="_blank" class="open-link">Buka →</a>
+            <div class="link-actions">
+              <button class="copy-link-btn" onclick="copyLinkText('pcLink', this)">Copy</button>
+              <a id="pcOpen" href="#" target="_blank" class="open-link">Buka →</a>
+            </div>
           </div>
+          
           <div class="link-item">
             <div class="device"><span>📱</span><div><strong>Android</strong><small>App Netflix</small></div></div>
             <input type="hidden" id="androidLink">
-            <a id="androidOpen" href="#" target="_blank" class="open-link">Buka →</a>
+            <div class="link-actions">
+              <button class="copy-link-btn" onclick="copyLinkText('androidLink', this)">Copy</button>
+              <a id="androidOpen" href="#" target="_blank" class="open-link">Buka →</a>
+            </div>
           </div>
+
           <div class="link-item">
             <div class="device"><span>📺</span><div><strong>Smart TV</strong><small>TV / STB</small></div></div>
             <input type="hidden" id="tvLink">
-            <a id="tvOpen" href="#" target="_blank" class="open-link">Buka →</a>
+            <div class="link-actions">
+              <button class="copy-link-btn" onclick="copyLinkText('tvLink', this)">Copy</button>
+              <a id="tvOpen" href="#" target="_blank" class="open-link">Buka →</a>
+            </div>
           </div>
         </div>
 
@@ -126,7 +137,6 @@
       <input class="input" id="amEmailInput" type="email" placeholder="contoh: kamu@gmail.com">
       <button class="primary-btn am-btn" id="amSendBtn">Kirim Magic Link →</button>
       <p class="message" id="amMessage"></p>
-      <!-- Elemen cooldown dihapus -->
 
       <hr class="divider">
 
@@ -157,7 +167,6 @@
 
       <button class="primary-btn viu-btn" id="viuGenerateBtn">GENERATE AKUN VIU →</button>
       <p class="message" id="viuMessage"></p>
-      <!-- Elemen cooldown dihapus -->
 
       <div class="result hidden" id="viuResult">
         <div class="result-top">
