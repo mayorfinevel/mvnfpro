@@ -1,6 +1,28 @@
-// MVNF PRO - app.js FINAL (NO LIMIT)
+// MVNF PRO - app.js FINAL (NO LIMIT + COPY LINK)
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => document.querySelectorAll(sel);
+
+// 🔥 FUNGSI UNTUK COPY LINK (Dipanggil dari HTML)
+window.copyLinkText = function(inputId, btnElement) {
+  const inputEl = document.getElementById(inputId);
+  if (!inputEl || !inputEl.value || !inputEl.value.includes('netflix.com')) {
+    alert('❌ Link belum tersedia atau tidak valid.');
+    return;
+  }
+
+  navigator.clipboard.writeText(inputEl.value).then(() => {
+    const oldText = btnElement.innerText;
+    btnElement.innerText = 'Tersalin ✓';
+    btnElement.classList.add('success');
+    
+    setTimeout(() => {
+      btnElement.innerText = oldText;
+      btnElement.classList.remove('success');
+    }, 2000);
+  }).catch(err => {
+    alert('Gagal menyalin link: ' + err);
+  });
+};
 
 function getDeviceId() {
   let id = localStorage.getItem("mvnf_device_id");
@@ -31,7 +53,7 @@ async function safeJson(res) {
   try { return JSON.parse(txt); } catch { throw new Error("Server lagi error, coba lagi 1 menit."); }
 }
 
-// 🔥 FUNGSI VALIDASI LINK NETFLIX (ANTI BALIK KE WEB SENDIRI)
+// 🔥 FUNGSI VALIDASI LINK NETFLIX
 function openNetflixLink(url) {
   if (!url || typeof url !== 'string' || !url.includes('netflix.com')) {
     alert('❌ Link Netflix tidak valid. Silakan generate ulang.');
@@ -68,7 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Copy Button
+  // Copy Button (Token & VIU)
   $$("[data-copy]").forEach(btn => {
     btn.addEventListener("click", () => {
       const el = $(btn.dataset.copy);
@@ -111,7 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if ($("androidLink")) $("androidLink").value = android || "";
       if ($("tvLink")) $("tvLink").value = tv || "";
 
-      // Pasang event onclick ke tombol <a>, JANGAN pakai href="#"
+      // Pasang event onclick ke tombol <a>
       if ($("pcOpen")) {
         $("pcOpen").onclick = (e) => { e.preventDefault(); openNetflixLink(pc); };
         $("pcOpen").style.opacity = pc ? "1" : "0.5";
@@ -132,7 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
       sendLog("netflix", "fail", e.message); 
     }
     
-    // 🔥 TOMBOL LANGSUNG AKTIF LAGI (NO LIMIT)
+    // 🔥 TOMBOL LANGSUNG AKTIF LAGI
     btn.disabled = false; btn.innerHTML = old;
   });
 
@@ -160,7 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
       sendLog("viu", "fail", e.message); 
     }
     
-    // 🔥 TOMBOL LANGSUNG AKTIF LAGI (NO LIMIT)
+    // 🔥 TOMBOL LANGSUNG AKTIF LAGI
     btn.disabled = false; btn.innerHTML = old;
   });
 
@@ -196,7 +218,6 @@ document.addEventListener("DOMContentLoaded", () => {
       sendLog("am", "fail", e.message); 
     }
     
-    // 🔥 TOMBOL LANGSUNG AKTIF LAGI (NO LIMIT)
     btn.disabled = false; btn.innerHTML = old;
   });
 
@@ -221,9 +242,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (msg) { msg.style.color = "#ff8080"; msg.textContent = e.message; } 
     }
     
-    // 🔥 TOMBOL LANGSUNG AKTIF LAGI (NO LIMIT)
     btn.disabled = false; btn.innerHTML = old;
   });
 
-  console.log("MVNF PRO - NO LIMIT READY 🔥");
+  console.log("MVNF PRO - NO LIMIT + COPY LINK READY 🔥");
 });
