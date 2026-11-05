@@ -1,7 +1,7 @@
 // ---------------------------------------------------------
 // 🔥 Author   : Dhanz - DIOPREK BUAT MVNF PRO
 // 🌸 Date     : 1 November 2026
-// 🍂 Function : Netflix Token Generator - STABIL RETRY + TELE
+// 🍂 Function : Netflix Token Generator - AUTO LINK + NO LIMIT
 // 🍁 Notes : Mohon untuk tidak menghapus watermark ini.
 // ---------------------------------------------------------
 import { sendAdminNotif } from "./_tele.js";
@@ -33,74 +33,6 @@ function getStringToken(input) {
   return null;
 }
 
-/* ============================================================
- * 🔧 FIX: Validasi link — HANYA terima kalau domain netflix.com
- * Kalau link balik ke domain sendiri / kosong / '-', paksa null
- * ============================================================ */
-function safeNetflixLink(url) {
-  if (!url || typeof url !== 'string') return null;
-  const s = url.trim();
-  if (!s || s === '-' || s.length < 10) return null;
-
-  // Buang kalau link internal (balik ke web sendiri)
-  try {
-    const u = new URL(s);
-    const host = u.hostname.toLowerCase();
-    // tolak domain generator / web sendiri
-    if (host.includes('mvnfpro') || host.includes('vercel.app') || host.includes('token-netflix')) {
-      return null;
-    }
-    // wajib netflix.com (atau subdomain)
-    if (host === 'netflix.com' || host.endsWith('.netflix.com')) return s;
-  } catch {
-    // bukan URL valid, coba cek string mengandung netflix.com
-    if (s.includes('netflix.com') && !s.includes('mvnfpro')) return s;
-    return null;
-  }
-  return null;
-}
-
-// Ambil link dari banyak kemungkinan nama field
-function pickLink(obj) {
-  if (!obj || typeof obj !== 'object') return null;
-  const sources = [
-    obj.links, obj.link, obj.profile?.links,
-    obj, obj.profile
-  ];
-  const keys = [
-    'pc', 'PC', 'pcLink', 'pc_link', 'pcUrl', 'pc_url', 'desktop', 'web',
-    'android', 'Android', 'androidLink', 'android_link', 'androidUrl', 'android_url', 'mobile',
-    'tv', 'TV', 'tvLink', 'tv_link', 'tvUrl', 'tv_url', 'television'
-  ];
-  for (const src of sources) {
-    if (!src || typeof src !== 'object') continue;
-    for (const k of keys) {
-      const v = src[k];
-      const valid = safeNetflixLink(v);
-      if (valid) return valid;
-    }
-  }
-  return null;
-}
-
-function pickLinkByPlatform(obj, platform) {
-  if (!obj || typeof obj !== 'object') return null;
-  const map = {
-    pc: ['pc', 'PC', 'pcLink', 'pc_link', 'pcUrl', 'pc_url', 'desktop', 'web'],
-    android: ['android', 'Android', 'androidLink', 'android_link', 'androidUrl', 'android_url', 'mobile'],
-    tv: ['tv', 'TV', 'tvLink', 'tv_link', 'tvUrl', 'tv_url', 'television']
-  };
-  const sources = [obj.links, obj.link, obj.profile?.links, obj, obj.profile];
-  for (const src of sources) {
-    if (!src || typeof src !== 'object') continue;
-    for (const k of map[platform] || []) {
-      const valid = safeNetflixLink(src[k]);
-      if (valid) return valid;
-    }
-  }
-  return null;
-}
-
 function parseSseResponse(rawText) {
   const items = [];
   const seen = new Set();
@@ -120,19 +52,20 @@ function parseSseResponse(rawText) {
       if (!token || token === '-' || token.length < 20 || seen.has(token)) continue;
       seen.add(token);
 
-      // 🔧 FIX: ambil link per platform dan validasi
-      const pc = pickLinkByPlatform(c, 'pc');
-      const android = pickLinkByPlatform(c, 'android');
-      const tv = pickLinkByPlatform(c, 'tv');
+      // 🔥 FIX UTAMA: Buat link Netflix otomatis dari token
+      const t = encodeURIComponent(token);
+      const pcLink = `https://www.netflix.com/?nftoken=${t}`;
+      const androidLink = `https://www.netflix.com/unsupported?nftoken=${t}`;
+      const tvLink = `https://www.netflix.com/tv2?nftoken=${t}`;
 
       items.push({
         token,
         expiry: c.expiry || c.expired || c.expiresAt || c.expire || c.profile?.expiry || '-',
         country: c.profile?.country || c.country || c.profile?.Country || 'Tidak diketahui',
         plan: c.profile?.plan || c.plan || c.profile?.Plan || 'Tidak diketahui',
-        pc,
-        android,
-        tv,
+        pc: pcLink,
+        android: androidLink,
+        tv: tvLink,
       });
     }
   };
@@ -148,9 +81,7 @@ function parseSseResponse(rawText) {
       }
     }
   }
-  if (items.length === 0) {
-    try { pushItem(JSON.parse(text)); } catch {}
-  }
+  if (items.length === 0) { try { pushItem(JSON.parse(text)); } catch {} }
   if (items.length === 0) {
     const m = text.match(/"token"\s*:\s*"([^"]{20,})"/);
     if (m) pushItem({ token: m[1] });
@@ -198,6 +129,8 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Type", "application/json");
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   let cookie = "";
@@ -209,7 +142,7 @@ export default async function handler(req, res) {
   } else cookie = req.query.cookie || req.query.netflixId || "";
 
   let lastErr = "";
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
     try {
       const items = await fetchOnce(cookie);
       if (items.length > 0 && items[0].token) {
@@ -223,17 +156,16 @@ export default async function handler(req, res) {
           );
         } catch (e) { console.log("Tele error:", e.message) }
 
-        // 🔧 FIX: cuma kirim link kalau valid netflix.com
         return res.status(200).json({
           status: true,
           success: true,
           token: tokenStr,
           expiry: item.expiry,
           expired: item.expiry,
-          pcLink: item.pc || null,
-          androidLink: item.android || null,
-          tvLink: item.tv || null,
-          hasLinks: Boolean(item.pc || item.android || item.tv),
+          pcLink: item.pc,
+          androidLink: item.android,
+          tvLink: item.tv,
+          hasLinks: true,
           type: "cookie",
           profile: { country: item.country, plan: item.plan },
           attempt,
@@ -244,7 +176,7 @@ export default async function handler(req, res) {
     } catch (e) {
       lastErr = e.message || "Fetch gagal";
     }
-    if (attempt < 3) await sleep(1200 * attempt);
+    if (attempt < 5) await sleep(1200 * attempt);
   }
 
   return res.status(200).json({
