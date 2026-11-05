@@ -120,11 +120,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await safeJson(res);
       if (!res.ok || !data.token) throw new Error(data.message || "Gagal generate, coba lagi.");
       
-      // Tampilkan Token
       if ($("tokenText")) $("tokenText").textContent = data.token;
       if ($("expiry")) $("expiry").textContent = data.expiry || data.expired || data.raw?.data?.[0]?.expiry || "—";
       
-      // Setup Link (Hanya pasang jika valid netflix.com)
       const pc = data.pcLink;
       const android = data.androidLink;
       const tv = data.tvLink;
@@ -133,7 +131,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if ($("androidLink")) $("androidLink").value = android || "";
       if ($("tvLink")) $("tvLink").value = tv || "";
 
-      // Pasang event onclick ke tombol <a>
       if ($("pcOpen")) {
         $("pcOpen").onclick = (e) => { e.preventDefault(); openNetflixLink(pc); };
         $("pcOpen").style.opacity = pc ? "1" : "0.5";
@@ -154,7 +151,6 @@ document.addEventListener("DOMContentLoaded", () => {
       sendLog("netflix", "fail", e.message); 
     }
     
-    // 🔥 TOMBOL LANGSUNG AKTIF LAGI
     btn.disabled = false; btn.innerHTML = old;
   });
 
@@ -182,19 +178,19 @@ document.addEventListener("DOMContentLoaded", () => {
       sendLog("viu", "fail", e.message); 
     }
     
-    // 🔥 TOMBOL LANGSUNG AKTIF LAGI
     btn.disabled = false; btn.innerHTML = old;
   });
 
   // ==========================================
-  // 🔥 LOGIKA AM (TANPA COOLDOWN)
+  // 🔥 LOGIKA AM (TANPA COOLDOWN) - WILLzzz API
   // ==========================================
   if ($("amCheckStats")) $("amCheckStats").addEventListener("click", async () => {
     try {
       const res = await fetch("/api/am", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stats" }) });
       const data = await safeJson(res);
-      if ($("amApiStatus")) $("amApiStatus").textContent = data.success ? "ONLINE" : "OFFLINE";
-      if ($("amStatsRaw")) $("amStatsRaw").textContent = JSON.stringify(data.data || data).slice(0, 80);
+      const isOk = data.status === true || data.success === true;
+      if ($("amApiStatus")) $("amApiStatus").textContent = isOk ? "ONLINE" : "OFFLINE";
+      if ($("amStatsRaw")) $("amStatsRaw").textContent = JSON.stringify(data).slice(0, 80);
     } catch { if ($("amApiStatus")) $("amApiStatus").textContent = "ERROR"; }
   });
 
@@ -209,9 +205,14 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const res = await fetch("/api/am", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", email }) });
       const data = await safeJson(res);
-      if (!data.success) throw new Error(data.message || data.data?.message || "Gagal kirim magic link.");
       
-      if (msg) { msg.style.color = "#67d89a"; msg.textContent = "✅ Magic link dikirim! Cek email / spam 1-2 menit."; }
+      const isOk = data.status === true || data.success === true;
+      if (!isOk) throw new Error(data.message || data.error || "Gagal kirim magic link.");
+      
+      if (msg) { 
+        msg.style.color = "#67d89a"; 
+        msg.textContent = "✅ " + (data.message || "Magic link dikirim! Cek email / spam."); 
+      }
       sendLog("am", "success", email);
     } catch (e) { 
       if (msg) { msg.style.color = "#ff8080"; msg.textContent = e.message; } 
@@ -233,9 +234,14 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const res = await fetch("/api/am", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify", email, magicLink }) });
       const data = await safeJson(res);
-      if (!data.success) throw new Error(data.message || data.data?.message || "Verifikasi gagal.");
       
-      if (msg) { msg.style.color = "#67d89a"; msg.textContent = "✅ AM Premium Aktif! Login di Alight Motion pake email yang sama."; }
+      const isOk = data.status === true || data.success === true;
+      if (!isOk) throw new Error(data.message || data.error || "Verifikasi gagal.");
+      
+      if (msg) { 
+        msg.style.color = "#67d89a"; 
+        msg.textContent = "✅ " + (data.message || "AM Premium Aktif! Login di Alight Motion pake email yang sama."); 
+      }
       if ($("amResult")) $("amResult").classList.remove("hidden");
       sendLog("am", "success", email);
     } catch (e) { 
